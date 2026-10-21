@@ -102,7 +102,8 @@ async def run_workflow(req: RunRequest):
         tone=req.tone,
         offer=req.offer,
         context=req.context,
-        approval_required=req.approval_required
+        approval_required=req.approval_required,
+        live_search_enabled=os.getenv("ENABLE_LIVE_SEARCH", "false").lower() == "true"
     )
 
     platform_posts = []
