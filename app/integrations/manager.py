@@ -62,9 +62,13 @@ class PlatformManager:
         self.save_connection(connection)
 
     def get_connection(self, connection_id: str, tenant_id: Optional[str] = None) -> Optional[ConnectionRecord]:
+        """Read one connection from durable storage; always scope reads by tenant when supplied."""
         with self._db() as con:
-            row = con.execute("SELECT * FROM connections WHERE id=?", (connection_id,)).fetchone()
-        if not row or (tenant_id is not None and row["tenant_id"] != tenant_id):
+            if tenant_id is None:
+                row = con.execute("SELECT * FROM connections WHERE id=?", (connection_id,)).fetchone()
+            else:
+                row = con.execute("SELECT * FROM connections WHERE id=? AND tenant_id=?", (connection_id, tenant_id)).fetchone()
+        if not row:
             return None
         connection = ConnectionRecord(
             connection_id=row["id"], tenant_id=row["tenant_id"], platform=row["platform"],
@@ -77,6 +81,7 @@ class PlatformManager:
         return connection
 
     def list_connections(self, tenant_id: str = "default") -> list[ConnectionRecord]:
+        """Read active connections for one tenant only."""
         with self._db() as con:
             rows = con.execute(
                 "SELECT * FROM connections WHERE tenant_id=? AND is_active=1 ORDER BY created_at DESC",
@@ -91,10 +96,8 @@ class PlatformManager:
                 scopes=json.loads(row["scopes_json"] or "[]"), is_active=bool(row["is_active"]),
                 created_at=row["created_at"], updated_at=row["updated_at"]
             )
-            self._connections[item.connection_id] = item
             records.append(item)
         return records
-
     async def publish(
         self, platform: str, connection_id: str, copy: str,
         idempotency_key: str, media_urls: Optional[list[str]] = None,
