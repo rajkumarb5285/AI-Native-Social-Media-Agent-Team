@@ -3,7 +3,7 @@ import json
 import httpx
 from typing import Optional
 from app.services.llm.base import BaseLLMProvider, ChatMessage, LLMResponse, LLMUsage
-from app.main import clean_and_parse_json
+from app.services.llm.json_utils import clean_and_parse_json
 
 class OpenAICompatibleProvider(BaseLLMProvider):
     def __init__(
