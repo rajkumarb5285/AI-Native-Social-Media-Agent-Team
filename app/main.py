@@ -70,6 +70,7 @@ from app.security.auth import get_current_user, require_role, AuthenticatedUser
 from app.security.audit import AuditLogger
 from app.security.rate_limit import check_rate_limit
 from app.integrations.manager import platform_manager
+from app.integrations.base import ConnectionRecord
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
@@ -346,7 +347,67 @@ def get_audit_trail(user: AuthenticatedUser = Depends(require_role(["admin"]))):
         rows = con.execute("SELECT * FROM audit_events WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100", (user.tenant_id,)).fetchall()
     return {"events": [dict(r) for r in rows]}
 
+def _oauth_state_table():
+    with db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS oauth_states (
+            state TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, platform TEXT NOT NULL,
+            redirect_uri TEXT NOT NULL, created_at TEXT NOT NULL
+        )""")
+
 @app.get("/api/connections")
 def list_connections(user: AuthenticatedUser = Depends(get_current_user)):
     conns = platform_manager.list_connections(user.tenant_id)
     return {"connections": [c.model_dump(exclude={"encrypted_access_token", "encrypted_refresh_token"}) for c in conns]}
+
+@app.get("/api/connections/{platform}/connect")
+def start_social_connect(platform: str, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
+    platform = platform.lower()
+    adapter = platform_manager.get_adapter(platform)
+    if not adapter:
+        raise HTTPException(400, "Unsupported platform. Supported for this prototype: LinkedIn and X.")
+    client_id_name = "LINKEDIN_CLIENT_ID" if platform == "linkedin" else "TWITTER_CLIENT_ID"
+    if not os.getenv(client_id_name, "").strip():
+        raise HTTPException(503, f"{client_id_name} is not configured.")
+    public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+    if not public_base:
+        raise HTTPException(503, "Set PUBLIC_BASE_URL to the HTTPS URL of this deployed API.")
+    redirect_uri = f"{public_base}/api/connections/{platform}/callback"
+    state = uuid.uuid4().hex + uuid.uuid4().hex
+    _oauth_state_table()
+    with db() as con:
+        con.execute("INSERT INTO oauth_states(state,tenant_id,platform,redirect_uri,created_at) VALUES(?,?,?,?,?)",
+                    (state, user.tenant_id, platform, redirect_uri, now()))
+    if platform == "linkedin":
+        scopes = ["w_member_social", "openid", "profile", "email"]
+    else:
+        scopes = ["tweet.read", "tweet.write", "users.read", "offline.access"]
+    return {"authorization_url": adapter.connect_url(user.tenant_id, scopes, redirect_uri, state),
+            "platform": platform, "redirect_uri": redirect_uri}
+
+@app.get("/api/connections/{platform}/callback")
+async def finish_social_connect(platform: str, code: str, state: str):
+    platform = platform.lower()
+    _oauth_state_table()
+    with db() as con:
+        row = con.execute("SELECT * FROM oauth_states WHERE state=? AND platform=?", (state, platform)).fetchone()
+        if not row:
+            raise HTTPException(400, "OAuth state is invalid, expired, or already used.")
+        # One-time state prevents replay.
+        con.execute("DELETE FROM oauth_states WHERE state=?", (state,))
+    adapter = platform_manager.get_adapter(platform)
+    if not adapter:
+        raise HTTPException(400, "Unsupported platform.")
+    try:
+        connection = await adapter.handle_oauth_callback(
+            code=code, redirect_uri=row["redirect_uri"], state=state, tenant_id=row["tenant_id"]
+        )
+        if not await adapter.validate_connection(connection):
+            raise HTTPException(502, "The platform did not verify this connection.")
+        platform_manager.save_connection(connection)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"OAuth exchange or connection verification failed: {type(exc).__name__}")
+    return HTMLResponse(
+        "<html><body><h2>Account connected</h2><p>You can return to the Social Agent dashboard.</p></body></html>"
+    )
