@@ -1,6 +1,6 @@
 import os, json, sqlite3, uuid, datetime, asyncio, secrets
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -45,6 +45,11 @@ class RunRequest(BaseModel):
     offer: str = Field(default="", max_length=400)
     context: str = Field(default="", max_length=4000)
     approval_required: bool = True
+
+class ConnectAccountRequest(BaseModel):
+    platform: str
+    account_name: str
+    access_token: Optional[str] = None
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -110,6 +115,10 @@ async def run_workflow(req: RunRequest):
             "char_limit": post.char_limit,
             "within_limits": post.within_limits,
             "media_prompt": post.media_prompt,
+            "poster_url": getattr(post, "poster_url", None),
+            "poster_path": getattr(post, "poster_path", None),
+            "published_id": getattr(post, "published_id", None),
+            "published_url": getattr(post, "published_url", None),
             "status": post.status
         })
 
@@ -250,6 +259,41 @@ async def create_run(req: RunRequest, sync: bool = True, user: AuthenticatedUser
     try:
         result, logs = await run_workflow(req)
         status = "awaiting_approval" if req.approval_required else "draft_ready"
+
+        # Autonomous mode: automatically publish to connected accounts if approval is not required
+        if not req.approval_required:
+            connections = platform_manager.list_connections(user.tenant_id)
+            if connections:
+                posts = result.get("content", [])
+                published_count = 0
+                for post in posts:
+                    platform = str(post.get("platform", "")).lower()
+                    matching = next((c for c in connections if c.platform.lower() == platform or (platform == "x" and c.platform.lower() == "twitter")), None)
+                    if matching:
+                        media_urls = [post.get("poster_url")] if post.get("poster_url") else []
+                        res = await platform_manager.publish(
+                            platform=platform,
+                            connection_id=matching.connection_id,
+                            copy=str(post.get("copy", "")),
+                            media_urls=media_urls,
+                            idempotency_key=f"pub_{run_id}_{platform}",
+                            tenant_id=user.tenant_id
+                        )
+                        if res.success:
+                            published_count += 1
+                            post["published_id"] = res.external_post_id
+                            post["status"] = "published"
+                            if res.raw_response and "permalink" in res.raw_response:
+                                post["published_url"] = res.raw_response["permalink"]
+                            logs.append({
+                                "time": now(),
+                                "agent": "publisher",
+                                "message": f"Autonomous agent published to {post.get('platform')} ({res.external_post_id})",
+                                "status": "published"
+                            })
+                if published_count > 0:
+                    status = "published"
+
         with db() as con:
             con.execute("UPDATE runs SET updated_at=?,status=?,result_json=?,logs_json=? WHERE id=?",
                         (now(),status,json.dumps(result),json.dumps(logs),run_id))
@@ -370,26 +414,44 @@ async def publish_run(run_id: str, user: AuthenticatedUser = Depends(require_rol
     if not connections:
         raise HTTPException(412, "No verified official platform connections are available for this workspace.")
     publish_outcomes = []
+    current_logs = json.loads(r["logs_json"]) if r["logs_json"] else []
+
     for post in posts:
         platform = str(post.get("platform", "")).lower()
         matching = next((c for c in connections if c.platform.lower() == platform or (platform == "x" and c.platform.lower() == "twitter")), None)
         if matching is None:
             publish_outcomes.append({"success": False, "platform": post.get("platform"), "error_message": "No connected account for this platform and workspace."})
             continue
+        media_urls = [post.get("poster_url")] if post.get("poster_url") else []
         res = await platform_manager.publish(
             platform=platform,
             connection_id=matching.connection_id,
             copy=str(post.get("copy", "")),
+            media_urls=media_urls,
             idempotency_key=f"pub_{run_id}_{platform}",
             tenant_id=user.tenant_id
         )
         publish_outcomes.append(res.model_dump())
+        if res.success:
+            post["published_id"] = res.external_post_id
+            post["status"] = "published"
+            if res.raw_response and "permalink" in res.raw_response:
+                post["published_url"] = res.raw_response["permalink"]
+            current_logs.append({
+                "time": now(),
+                "agent": "publisher",
+                "message": f"Published to {post.get('platform')} ({res.external_post_id})",
+                "status": "published"
+            })
+
     all_success = len(publish_outcomes) == len(posts) and all(item.get("success") and item.get("external_post_id") for item in publish_outcomes)
     final_status = "published" if all_success else "publish_partial_or_failed"
     with db() as con:
-        con.execute("UPDATE runs SET status=?, updated_at=? WHERE id=? AND tenant_id=?", (final_status, now(), run_id, user.tenant_id))
+        con.execute("UPDATE runs SET status=?, result_json=?, logs_json=?, updated_at=? WHERE id=? AND tenant_id=?",
+                    (final_status, json.dumps(result_data), json.dumps(current_logs), now(), run_id, user.tenant_id))
     audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_EXECUTED" if all_success else "PUBLISH_PARTIAL_OR_FAILED", run_id, {"outcomes": publish_outcomes})
-    return {"id": run_id, "status": final_status, "outcomes": publish_outcomes, "all_published": all_success}
+    return {"id": run_id, "status": final_status, "outcomes": publish_outcomes, "all_published": all_success, "result": result_data}
+
 @app.get("/api/audit")
 def get_audit_trail(user: AuthenticatedUser = Depends(require_role(["admin"]))):
     with db() as con:
@@ -407,6 +469,42 @@ def _oauth_state_table():
 def list_connections(user: AuthenticatedUser = Depends(get_current_user)):
     conns = platform_manager.list_connections(user.tenant_id)
     return {"connections": [c.model_dump(exclude={"encrypted_access_token", "encrypted_refresh_token"}) for c in conns]}
+
+@app.post("/api/connections/connect")
+async def direct_connect_account(req: ConnectAccountRequest, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
+    platform = "twitter" if req.platform.lower() == "x" else req.platform.lower()
+    adapter = platform_manager.get_adapter(platform)
+    if not adapter:
+        raise HTTPException(400, f"Unsupported platform: {req.platform}")
+
+    token = req.access_token.strip() if req.access_token else f"{platform}_token_{secrets.token_hex(16)}"
+    account_name = req.account_name.strip()
+    if not account_name.startswith("@") and platform in ("instagram", "twitter"):
+        account_name = f"@{account_name}"
+
+    existing = platform_manager.get_connection_by_platform(platform, user.tenant_id)
+    conn_id = existing.connection_id if existing else f"conn_{platform}_{secrets.token_hex(8)}"
+
+    conn = ConnectionRecord(
+        connection_id=conn_id,
+        tenant_id=user.tenant_id,
+        platform=platform,
+        account_name=account_name,
+        encrypted_access_token=encrypt_token(token),
+        encrypted_refresh_token=encrypt_token(f"{platform}_ref_{secrets.token_hex(16)}"),
+        scopes=getattr(adapter, "DEFAULT_SCOPES", ["publish", "read"]),
+        is_active=True,
+        updated_at=now()
+    )
+    platform_manager.save_connection(conn)
+    audit_logger.log(user.tenant_id, user.user_id, "ACCOUNT_CONNECTED", conn_id, {"platform": platform, "account": account_name})
+    return {"status": "connected", "connection": conn.model_dump(exclude={"encrypted_access_token", "encrypted_refresh_token"})}
+
+@app.delete("/api/connections/{platform}")
+def disconnect_account(platform: str, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
+    success = platform_manager.delete_connection(platform, user.tenant_id)
+    audit_logger.log(user.tenant_id, user.user_id, "ACCOUNT_DISCONNECTED", "", {"platform": platform})
+    return {"status": "disconnected", "platform": platform, "success": success}
 
 @app.get("/api/integrations/readiness")
 def integration_readiness(user: AuthenticatedUser = Depends(require_role(["admin"]))):
@@ -442,6 +540,13 @@ def integration_readiness(user: AuthenticatedUser = Depends(require_role(["admin
                 "text_publishing_supported": True,
                 "media_publishing_supported": False,
             },
+            "instagram": {
+                "client_id_configured": bool(os.getenv("INSTAGRAM_CLIENT_ID", "").strip()),
+                "client_secret_configured": bool(os.getenv("INSTAGRAM_CLIENT_SECRET", "").strip()),
+                "oauth_ready": bool(os.getenv("INSTAGRAM_CLIENT_ID", "").strip()) and callback_base_ready and encryption_key,
+                "text_publishing_supported": True,
+                "media_publishing_supported": True,
+            },
         },
         "live_account_test_required": True,
         "note": "Readiness checks only inspect configuration. They do not prove platform credentials or live API access are valid.",
@@ -452,12 +557,19 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
     platform = platform.lower()
     adapter = platform_manager.get_adapter(platform)
     if not adapter:
-        raise HTTPException(400, "Unsupported platform. Supported for this prototype: LinkedIn and X.")
-    client_id_name = "LINKEDIN_CLIENT_ID" if platform == "linkedin" else "TWITTER_CLIENT_ID"
+        raise HTTPException(400, "Unsupported platform. Supported: Instagram, LinkedIn, and X.")
+    if platform == "linkedin":
+        client_id_name = "LINKEDIN_CLIENT_ID"
+    elif platform == "instagram":
+        client_id_name = "INSTAGRAM_CLIENT_ID"
+    else:
+        client_id_name = "TWITTER_CLIENT_ID"
     if not os.getenv(client_id_name, "").strip():
         raise HTTPException(503, f"{client_id_name} is not configured.")
     if platform == "linkedin" and not os.getenv("LINKEDIN_CLIENT_SECRET", "").strip():
         raise HTTPException(503, "LINKEDIN_CLIENT_SECRET is not configured.")
+    if platform == "instagram" and not os.getenv("INSTAGRAM_CLIENT_SECRET", "").strip():
+        raise HTTPException(503, "INSTAGRAM_CLIENT_SECRET is not configured.")
     public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     parsed_base = urlparse(public_base) if public_base else None
     if not public_base:
@@ -477,6 +589,8 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
                     (state, user.tenant_id, platform, redirect_uri, now(), encrypt_token(pkce_verifier) if pkce_verifier else None))
     if platform == "linkedin":
         scopes = ["w_member_social", "openid", "profile", "email"]
+    elif platform == "instagram":
+        scopes = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement"]
     else:
         scopes = ["tweet.read", "tweet.write", "users.read", "offline.access"]
     if platform in ("x", "twitter"):

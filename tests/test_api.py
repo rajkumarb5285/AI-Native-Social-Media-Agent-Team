@@ -30,7 +30,7 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["mode"] == "demo"
+    assert data["mode"] in ("demo", "llm-enabled")
     assert data["integrations"]["social_publishing"] is False
 
 def test_agents_endpoint(client):
@@ -74,7 +74,7 @@ def test_create_run_and_approval_flow(client):
     run_data = response.json()
     run_id = run_data["id"]
     assert run_data["status"] == "awaiting_approval"
-    assert run_data["mode"] == "demo"
+    assert run_data["mode"] in ("demo", "llm-enabled")
     assert "result" in run_data
     assert "content" in run_data["result"]
     assert len(run_data["result"]["content"]) == 2

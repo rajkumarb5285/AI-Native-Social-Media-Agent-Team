@@ -1,6 +1,9 @@
 """Channel-specific social copy formatting and validation."""
+from typing import Optional
 from pydantic import Field, ConfigDict
 from app.agents.base import BaseAgent, AgentInput, AgentOutput
+
+from app.services.poster_generator import generate_social_poster
 
 PLATFORM_LIMITS = {
     "linkedin": 3000,
@@ -22,6 +25,10 @@ class PlatformPost(AgentInput):
     within_limits: bool
     hashtags: list[str] = Field(default_factory=list)
     media_prompt: str = ""
+    poster_url: str = ""
+    poster_path: str = ""
+    published_id: Optional[str] = None
+    published_url: Optional[str] = None
     status: str = "draft"
 
     @property
@@ -34,6 +41,7 @@ class RepurposingInput(AgentInput):
     headline: str
     brand: str
     call_to_action: str
+    tone: str = "visionary"
     platforms: list[str] = Field(default_factory=lambda: ["LinkedIn"])
 
 
@@ -73,6 +81,19 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
                 f"Channel: {platform}. Message: {input_data.headline}. "
                 "Do not render fake logos, statistics, or unapproved text."
             )
+            poster_url = ""
+            poster_path = ""
+            try:
+                poster_url, poster_path = generate_social_poster(
+                    brand=input_data.brand,
+                    headline=input_data.headline,
+                    platform=platform,
+                    tone=getattr(input_data, "tone", "visionary"),
+                    call_to_action=input_data.call_to_action
+                )
+            except Exception:
+                pass
+
             posts.append(PlatformPost(
                 platform=platform,
                 format="social_post",
@@ -82,6 +103,8 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
                 within_limits=count <= limit,
                 hashtags=hashtags,
                 media_prompt=media_prompt,
+                poster_url=poster_url,
+                poster_path=poster_path,
                 status="draft"
             ))
         return RepurposingOutput(

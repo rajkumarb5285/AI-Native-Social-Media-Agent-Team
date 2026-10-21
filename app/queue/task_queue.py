@@ -158,8 +158,44 @@ class DurableTaskQueue:
                     "char_limit": post.char_limit,
                     "within_limits": post.within_limits,
                     "media_prompt": post.media_prompt,
+                    "poster_url": getattr(post, "poster_url", None),
+                    "poster_path": getattr(post, "poster_path", None),
+                    "published_id": getattr(post, "published_id", None),
+                    "published_url": getattr(post, "published_url", None),
                     "status": post.status
                 })
+
+            final_status = "awaiting_approval" if req_data.get("approval_required", True) else "draft_ready"
+
+            # Autonomous mode in async worker
+            if not req_data.get("approval_required", True):
+                from app.integrations.manager import platform_manager
+                tenant_id = row["tenant_id"] if "tenant_id" in row.keys() else "default"
+                connections = platform_manager.list_connections(tenant_id)
+                if connections:
+                    published_any = False
+                    for p in platform_posts:
+                        plat = str(p.get("platform", "")).lower()
+                        matching = next((c for c in connections if c.platform.lower() == plat or (plat == "x" and c.platform.lower() == "twitter")), None)
+                        if matching:
+                            media_urls = [p.get("poster_url")] if p.get("poster_url") else []
+                            res = await platform_manager.publish(
+                                platform=plat,
+                                connection_id=matching.connection_id,
+                                copy=str(p.get("copy", "")),
+                                media_urls=media_urls,
+                                idempotency_key=f"pub_{run_id}_{plat}",
+                                tenant_id=tenant_id
+                            )
+                            if res.success:
+                                published_any = True
+                                p["published_id"] = res.external_post_id
+                                p["status"] = "published"
+                                if res.raw_response and "permalink" in res.raw_response:
+                                    p["published_url"] = res.raw_response["permalink"]
+                                append_log("Publisher", f"Autonomous agent published to {p.get('platform')} ({res.external_post_id})", "published")
+                    if published_any:
+                        final_status = "published"
 
             result = {
                 "workflow_id": execution.workflow_id,
@@ -195,8 +231,6 @@ class DurableTaskQueue:
                 },
                 "next_actions": execution.reporting.recommended_next_actions
             }
-
-            final_status = "awaiting_approval" if req_data.get("approval_required", True) else "draft_ready"
             
             with self._db() as con:
                 con.execute(

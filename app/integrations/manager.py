@@ -7,6 +7,7 @@ import datetime
 from app.integrations.base import BaseSocialAdapter, ConnectionRecord, PlatformPublishResult, PlatformMetricsResult, now_iso
 from app.integrations.linkedin import LinkedInAdapter
 from app.integrations.twitter import TwitterAdapter
+from app.integrations.instagram import InstagramAdapter
 from app.db.migrations import run_migrations
 
 
@@ -17,6 +18,7 @@ class PlatformManager:
             "linkedin": LinkedInAdapter(),
             "twitter": TwitterAdapter(),
             "x": TwitterAdapter(),
+            "instagram": InstagramAdapter(),
         }
 
     def _db(self):
@@ -83,6 +85,24 @@ class PlatformManager:
                 (tenant_id,),
             ).fetchall()
         return [self._from_row(row) for row in rows]
+
+    def get_connection_by_platform(self, platform: str, tenant_id: str = "default") -> Optional[ConnectionRecord]:
+        norm = "twitter" if platform.lower() == "x" else platform.lower()
+        with self._db() as con:
+            row = con.execute(
+                "SELECT * FROM connections WHERE tenant_id=? AND LOWER(platform)=? AND is_active=1 ORDER BY created_at DESC LIMIT 1",
+                (tenant_id, norm),
+            ).fetchone()
+        return self._from_row(row) if row else None
+
+    def delete_connection(self, platform: str, tenant_id: str = "default") -> bool:
+        norm = "twitter" if platform.lower() == "x" else platform.lower()
+        with self._db() as con:
+            con.execute(
+                "UPDATE connections SET is_active=0 WHERE tenant_id=? AND LOWER(platform)=?",
+                (tenant_id, norm)
+            )
+        return True
 
     @staticmethod
     def _expiry(connection: ConnectionRecord) -> Optional[datetime.datetime]:

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nexus — Autonomous Social Media Operations</title>
   <meta name="description" content="Enterprise multi-agent content orchestration, cross-platform repurposing, and editorial governance.">
+  <meta name="application-name" content="AI Native Social Agent Team">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -692,6 +693,214 @@
       from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
+    /* Poster Display Styles */
+    .poster-box {
+      margin-top: 14px;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      background: #090d16;
+    }
+    .poster-img {
+      width: 100%;
+      aspect-ratio: 1/1;
+      object-fit: cover;
+      display: block;
+      border-bottom: 1px solid var(--border-subtle);
+      transition: transform 0.2s ease;
+    }
+    .poster-img:hover {
+      transform: scale(1.008);
+    }
+    .poster-meta-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      background: rgba(14, 18, 27, 0.95);
+      font-size: 11px;
+    }
+    .poster-tag {
+      color: var(--text-secondary);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-dl {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.08);
+      padding: 5px 11px;
+      border-radius: 6px;
+      text-decoration: none;
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-dl:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+    .post-live-indicator {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+    }
+    .post-live-indicator a {
+      color: #34d399;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .post-live-indicator a:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal Backdrop & Window */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 7, 13, 0.82);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-card {
+      background: #0e131f;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-md);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+      width: 100%;
+      max-width: 560px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: modalSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalSlide {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .modal-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 22px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s;
+    }
+    .modal-close-btn:hover {
+      color: var(--text-primary);
+    }
+    .modal-body {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .channel-item {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .channel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .channel-brand-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .channel-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+    .channel-badge.connected {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .channel-badge.disconnected {
+      background: rgba(100, 116, 139, 0.15);
+      color: #94a3b8;
+      border: 1px solid rgba(100, 116, 139, 0.25);
+    }
+    .channel-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .channel-input {
+      background: #090d16;
+      border: 1px solid var(--border-subtle);
+      color: #fff;
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      flex: 1;
+      font-family: inherit;
+    }
+    .channel-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(8, 11, 18, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -706,6 +915,11 @@
         <div class="brand-title">Nexus <span class="workspace-pill">Studio</span></div>
       </a>
       <div class="nav-actions">
+        <button type="button" class="btn btn-secondary" onclick="toggleAccountsModal(true)" style="padding: 7px 12px; font-size: 12px; display: flex; align-items: center; gap: 7px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>Connected Channels</span>
+          <span id="connBadge" style="background: rgba(99, 102, 241, 0.25); color: #818cf8; font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 700;">0</span>
+        </button>
         <div class="status-badge">
           <div class="pulse-dot"></div>
           <span>Active Operations</span>
@@ -871,6 +1085,26 @@
     </div>
   </main>
 
+  <!-- Accounts Management Modal -->
+  <div id="accountsModal" class="modal-backdrop" style="display:none;" onclick="if(event.target === this) toggleAccountsModal(false)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Connected Organization Accounts</div>
+          <div class="modal-subtitle">Connect Instagram, LinkedIn, and Twitter/X for autonomous agent publishing</div>
+        </div>
+        <button class="modal-close-btn" onclick="toggleAccountsModal(false)">&times;</button>
+      </div>
+      <div class="modal-body" id="accountsListContainer">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <span style="font-size:11px; color:var(--text-muted);">Autonomous agent publishes automatically to all active channels.</span>
+        <button class="btn btn-secondary" onclick="toggleAccountsModal(false)">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
@@ -962,6 +1196,129 @@
       });
     });
 
+    // Connected Accounts Management
+    let currentConnections = [];
+
+    async function loadConnections() {
+      try {
+        const data = await api('/api/connections');
+        currentConnections = data.connections || [];
+        const badge = $('connBadge');
+        if (badge) badge.textContent = currentConnections.length;
+        renderAccountsModal();
+      } catch (err) {
+        console.error('Failed to load connections', err);
+      }
+    }
+
+    function toggleAccountsModal(show) {
+      const modal = $('accountsModal');
+      if (!modal) return;
+      modal.style.display = show ? 'flex' : 'none';
+      if (show) loadConnections();
+    }
+
+    function renderAccountsModal() {
+      const container = $('accountsListContainer');
+      if (!container) return;
+
+      const platforms = [
+        { id: 'instagram', name: 'Instagram (Meta)', defaultHandle: '@brand_instagram', desc: 'Direct container publishing for images, posters, and reels' },
+        { id: 'linkedin', name: 'LinkedIn', defaultHandle: '@brand_company', desc: 'Official professional feed publishing' },
+        { id: 'x', name: 'Twitter / X', defaultHandle: '@brand_official', desc: 'Direct tweet & thread publishing' }
+      ];
+
+      const currentBrand = $('brand')?.value ? ('@' + $('brand').value.toLowerCase().replace(/\s+/g,'_')) : '@brand_official';
+
+      container.innerHTML = platforms.map(p => {
+        const conn = currentConnections.find(c => c.platform.toLowerCase() === p.id || (p.id === 'x' && c.platform.toLowerCase() === 'twitter'));
+        const isConnected = Boolean(conn && conn.is_active);
+
+        if (isConnected) {
+          return `
+            <div class="channel-item">
+              <div class="channel-header">
+                <div class="channel-brand-info">
+                  <span>${p.name}</span>
+                </div>
+                <span class="channel-badge connected">● Connected</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center;">
+                <span>Account: <strong style="color:var(--text-primary);">${esc(conn.account_name)}</strong></span>
+                <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; color:#ef4444;" onclick="disconnectAccount('${p.id}')">Disconnect</button>
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="channel-item">
+            <div class="channel-header">
+              <div class="channel-brand-info">
+                <span>${p.name}</span>
+              </div>
+              <span class="channel-badge disconnected">Not Connected</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted);">${p.desc}</div>
+            <div class="channel-controls">
+              <input type="text" class="channel-input" id="input_${p.id}" placeholder="${p.defaultHandle}" value="${currentBrand}" />
+              <button type="button" class="btn btn-primary" style="padding:6px 14px; font-size:12px; white-space:nowrap;" onclick="connectAccount('${p.id}')">Connect Account</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function connectAccount(platform) {
+      const input = $('input_' + platform);
+      const handle = input ? input.value.trim() : '@brand_official';
+      if (!handle) {
+        toast('Enter your brand account handle');
+        return;
+      }
+      try {
+        await api('/api/connections/connect', {
+          method: 'POST',
+          body: JSON.stringify({ platform: platform, account_name: handle })
+        });
+        toast(platform.toUpperCase() + ' account connected');
+        await loadConnections();
+      } catch (err) {
+        toast(err.message || 'Connection failed');
+      }
+    }
+
+    async function disconnectAccount(platform) {
+      try {
+        await api('/api/connections/' + platform, { method: 'DELETE' });
+        toast(platform.toUpperCase() + ' account disconnected');
+        await loadConnections();
+      } catch (err) {
+        toast(err.message || 'Disconnect failed');
+      }
+    }
+
+    async function publishRun(id) {
+      try {
+        toast('Publishing to connected platforms...');
+        const r = await api('/api/runs/' + id + '/publish', { method: 'POST' });
+        toast('Published to channels successfully!');
+        await loadRun(id);
+        await loadHistory();
+      } catch (err) {
+        toast(err.message || 'Publishing failed. Check connected accounts.');
+      }
+    }
+
+    async function approveAndPublishRun(id) {
+      try {
+        await api('/api/runs/' + id + '/approve', { method: 'POST' });
+        await publishRun(id);
+      } catch (err) {
+        toast(err.message);
+      }
+    }
+
     // Render Creative Outputs
     function renderRun(r) {
       const brand = r.request?.brand || r.brand || 'Campaign';
@@ -979,11 +1336,16 @@
           <div class="approval-banner">
             <div class="approval-text">
               <strong>Editorial Approval Required</strong>
-              <span>Review channel-specific copy before marking drafts as verified.</span>
+              <span>Review channel-specific copy and posters before marking drafts as verified.</span>
             </div>
-            <button type="button" class="btn btn-success" onclick="approveRun('${r.id}')">
-              Sign Off & Approve
-            </button>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-secondary" onclick="approveRun('${r.id}')">
+                Approve Internally
+              </button>
+              <button type="button" class="btn btn-success" onclick="approveAndPublishRun('${r.id}')">
+                Approve & Publish to Channels
+              </button>
+            </div>
           </div>
         `;
       } else if (r.status === 'approved') {
@@ -991,7 +1353,19 @@
           <div class="approval-banner" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
             <div class="approval-text">
               <strong style="color: #6ee7b7;">✓ Verified & Approved</strong>
-              <span style="color: #a7f3d0;">Content passed editorial gate and compliance audit (Score: ${score}/100).</span>
+              <span style="color: #a7f3d0;">Content passed editorial gate (Score: ${score}/100). Ready for live publication.</span>
+            </div>
+            <button type="button" class="btn btn-success" onclick="publishRun('${r.id}')">
+              Publish to Connected Channels
+            </button>
+          </div>
+        `;
+      } else if (r.status === 'published') {
+        html += `
+          <div class="approval-banner" style="background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.3);">
+            <div class="approval-text">
+              <strong style="color: #a5b4fc;">✓ Autonomous Agent Published Live</strong>
+              <span style="color: #cbd5e1;">Branded content and visual posters have been dispatched to connected platform accounts.</span>
             </div>
           </div>
         `;
@@ -1013,11 +1387,50 @@
       if (posts.length) {
         html += '<div class="posts-grid">';
         posts.forEach((post, i) => {
+          const isInstagram = post.platform.toLowerCase().includes('instagram');
           const isTwitter = post.platform.toLowerCase().includes('twitter') || post.platform.toLowerCase().includes('x');
           const isLinkedIn = post.platform.toLowerCase().includes('linkedin');
-          const icon = isLinkedIn
-            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.65 1.65 0 0 0 1.66-1.66 1.66 1.66 0 0 0-3.32 0 1.66 1.66 0 0 0 1.66 1.66m1.39 9.94v-8.37H5.07v8.37h2.78z"/></svg>'
-            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+
+          let icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+          if (isInstagram) {
+            icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+          } else if (isLinkedIn) {
+            icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.65 1.65 0 0 0 1.66-1.66 1.66 1.66 0 0 0-3.32 0 1.66 1.66 0 0 0 1.66 1.66m1.39 9.94v-8.37H5.07v8.37h2.78z"/></svg>';
+          } else if (isTwitter) {
+            icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+          }
+
+          const hasPoster = Boolean(post.poster_url);
+          const isPublished = Boolean(post.published_id || post.status === 'published' || r.status === 'published');
+
+          let posterHtml = '';
+          if (hasPoster) {
+            posterHtml = `
+              <div class="poster-box">
+                <img src="${post.poster_url}" alt="${esc(post.platform)} Visual Poster" class="poster-img" />
+                <div class="poster-meta-bar">
+                  <span class="poster-tag">✦ 1080×1080 Visual Poster</span>
+                  <a href="${post.poster_url}" download="${esc(brand).toLowerCase().replace(/\s+/g,'_')}_${post.platform.toLowerCase()}_poster.png" class="btn-dl">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download
+                  </a>
+                </div>
+              </div>
+            `;
+          }
+
+          let liveIndicatorHtml = '';
+          if (isPublished) {
+            liveIndicatorHtml = `
+              <div class="post-live-indicator">
+                <span style="display:flex; align-items:center; gap:6px; color:#34d399; font-weight:600;">
+                  <span class="pulse-dot" style="background:#10b981; width:7px; height:7px;"></span>
+                  Live on ${esc(post.platform)}
+                </span>
+                ${post.published_url ? `<a href="${post.published_url}" target="_blank" rel="noopener">View on ${esc(post.platform)} ↗</a>` : ''}
+              </div>
+            `;
+          }
 
           html += `
             <div class="post-card">
@@ -1026,11 +1439,13 @@
                   ${icon}
                   <span>${esc(post.platform)}</span>
                 </div>
-                <div class="post-badge ${r.status === 'approved' ? 'badge-approved' : 'badge-draft'}">
-                  ${esc(r.status === 'approved' ? 'Ready' : 'Draft')}
+                <div class="post-badge ${isPublished ? 'badge-approved' : (r.status === 'approved' ? 'badge-approved' : 'badge-draft')}">
+                  ${isPublished ? 'Live' : (r.status === 'approved' ? 'Ready' : 'Draft')}
                 </div>
               </div>
               <div class="post-body" id="postText_${i}">${esc(post.copy)}</div>
+              ${posterHtml}
+              ${liveIndicatorHtml}
               <div class="post-footer">
                 <span class="char-badge">${post.character_count} chars</span>
                 <button type="button" class="btn btn-secondary" onclick="copyPostText('postText_${i}')">
@@ -1170,6 +1585,7 @@
     // Initial Load
     async function init() {
       await getAuthToken();
+      await loadConnections();
       await loadHistory();
     }
     init();
