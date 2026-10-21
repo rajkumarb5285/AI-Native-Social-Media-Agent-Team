@@ -164,6 +164,9 @@ class DurableTaskQueue:
             result = {
                 "workflow_id": execution.workflow_id,
                 "research_brief": execution.market_radar.hypothesis_summary,
+                "research_citations": [citation.model_dump() for citation in execution.market_radar.citations],
+                "research_is_live": execution.market_radar.is_live_search,
+                "content_generation_mode": execution.content_engine.generation_mode,
                 "content": platform_posts,
                 "flagship_narrative": {
                     "headline": execution.content_engine.flagship_headline,
