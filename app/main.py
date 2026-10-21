@@ -73,6 +73,7 @@ from app.integrations.manager import platform_manager
 from app.integrations.base import ConnectionRecord
 from urllib.parse import urlparse
 from app.services.llm.factory import get_llm_provider
+from app.integrations.crypto import encrypt_token, decrypt_token
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
