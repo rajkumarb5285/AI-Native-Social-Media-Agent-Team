@@ -44,21 +44,9 @@ class TwitterAdapter(BaseSocialAdapter):
         return f"{self.auth_url}?{urllib.parse.urlencode(params)}"
 
     async def handle_oauth_callback(self, code: str, redirect_uri: str, state: str, tenant_id: str, pkce_verifier: Optional[str] = None) -> ConnectionRecord:
-        verifier = pkce_verifier or self._pending_pkce.pop(state, None)
+        verifier = pkce_verifier
         if not verifier:
-            db_path = self._db_path_getter()
-            run_migrations(db_path)
-            with sqlite3.connect(db_path) as con:
-                con.row_factory = sqlite3.Row
-                row = con.execute("SELECT verifier_encrypted, created_at FROM oauth_pkce WHERE state=?", (state,)).fetchone()
-                con.execute("DELETE FROM oauth_pkce WHERE state=?", (state,))
-            if row:
-                created = datetime.datetime.fromisoformat(row["created_at"])
-                if (datetime.datetime.now(datetime.timezone.utc) - created).total_seconds() > 600:
-                    raise ValueError("OAuth PKCE verifier expired. Restart account connection.")
-                verifier = decrypt_token(row["verifier_encrypted"])
-        if not verifier:
-            raise ValueError("OAuth PKCE verifier missing or expired. Restart account connection.")
+            raise ValueError("OAuth PKCE verifier missing. Restart account connection.")
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 self.token_url,
@@ -74,22 +62,16 @@ class TwitterAdapter(BaseSocialAdapter):
             )
             resp.raise_for_status()
             data = resp.json()
-
         access_token = data["access_token"]
         refresh_token = data.get("refresh_token")
         expires_in = data.get("expires_in", 7200)
-        import datetime
         expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)).isoformat()
         return ConnectionRecord(
             connection_id=f"conn_tw_{uuid.uuid4().hex[:12]}",
-            tenant_id=tenant_id,
-            platform="twitter",
-            account_name="X / Twitter Account",
+            tenant_id=tenant_id, platform="twitter", account_name="X / Twitter Account",
             encrypted_access_token=encrypt_token(access_token),
             encrypted_refresh_token=encrypt_token(refresh_token) if refresh_token else None,
-            expires_at=expiry,
-            scopes=data.get("scope", "").split(" "),
-            is_active=True
+            expires_at=expiry, scopes=data.get("scope", "").split(" "), is_active=True
         )
 
     async def refresh_credentials(self, connection: ConnectionRecord) -> ConnectionRecord:
