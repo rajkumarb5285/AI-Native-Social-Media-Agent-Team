@@ -1,4 +1,4 @@
-import os, json, sqlite3, uuid, datetime, asyncio
+import os, json, sqlite3, uuid, datetime, asyncio, secrets
 from pathlib import Path
 from typing import Any
 import httpx
@@ -358,7 +358,7 @@ def _oauth_state_table():
     with db() as con:
         con.execute("""CREATE TABLE IF NOT EXISTS oauth_states (
             state TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, platform TEXT NOT NULL,
-            redirect_uri TEXT NOT NULL, created_at TEXT NOT NULL
+            redirect_uri TEXT NOT NULL, created_at TEXT NOT NULL, pkce_verifier_enc TEXT
         )""")
 
 @app.get("/api/connections")
@@ -383,22 +383,33 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
         raise HTTPException(503, "PUBLIC_BASE_URL must use HTTPS outside development/test.")
     redirect_uri = f"{public_base}/api/connections/{platform}/callback"
     state = uuid.uuid4().hex + uuid.uuid4().hex
+    pkce_verifier = secrets.token_urlsafe(64)[:96] if platform in ("x", "twitter") else None
     _oauth_state_table()
     with db() as con:
-        con.execute("INSERT INTO oauth_states(state,tenant_id,platform,redirect_uri,created_at) VALUES(?,?,?,?,?)",
-                    (state, user.tenant_id, platform, redirect_uri, now()))
+        # Migrate existing development DBs created before the PKCE field existed.
+        columns = {row[1] for row in con.execute("PRAGMA table_info(oauth_states)").fetchall()}
+        if "pkce_verifier_enc" not in columns:
+            con.execute("ALTER TABLE oauth_states ADD COLUMN pkce_verifier_enc TEXT")
+        con.execute("INSERT INTO oauth_states(state,tenant_id,platform,redirect_uri,created_at,pkce_verifier_enc) VALUES(?,?,?,?,?,?)",
+                    (state, user.tenant_id, platform, redirect_uri, now(), encrypt_token(pkce_verifier) if pkce_verifier else None))
     if platform == "linkedin":
         scopes = ["w_member_social", "openid", "profile", "email"]
     else:
         scopes = ["tweet.read", "tweet.write", "users.read", "offline.access"]
-    return {"authorization_url": adapter.connect_url(user.tenant_id, scopes, redirect_uri, state),
-            "platform": platform, "redirect_uri": redirect_uri}
+    if platform in ("x", "twitter"):
+        authorization_url = adapter.connect_url(user.tenant_id, scopes, redirect_uri, state, pkce_verifier=pkce_verifier)
+    else:
+        authorization_url = adapter.connect_url(user.tenant_id, scopes, redirect_uri, state)
+    return {"authorization_url": authorization_url, "platform": platform, "redirect_uri": redirect_uri}
 
 @app.get("/api/connections/{platform}/callback")
 async def finish_social_connect(platform: str, code: str, state: str):
     platform = platform.lower()
     _oauth_state_table()
     with db() as con:
+        columns = {item[1] for item in con.execute("PRAGMA table_info(oauth_states)").fetchall()}
+        if "pkce_verifier_enc" not in columns:
+            con.execute("ALTER TABLE oauth_states ADD COLUMN pkce_verifier_enc TEXT")
         row = con.execute("SELECT * FROM oauth_states WHERE state=? AND platform=?", (state, platform)).fetchone()
         if not row:
             raise HTTPException(400, "OAuth state is invalid, expired, or already used.")
@@ -412,9 +423,15 @@ async def finish_social_connect(platform: str, code: str, state: str):
     if not adapter:
         raise HTTPException(400, "Unsupported platform.")
     try:
-        connection = await adapter.handle_oauth_callback(
-            code=code, redirect_uri=row["redirect_uri"], state=state, tenant_id=row["tenant_id"]
-        )
+        if platform in ("x", "twitter"):
+            connection = await adapter.handle_oauth_callback(
+                code=code, redirect_uri=row["redirect_uri"], state=state, tenant_id=row["tenant_id"],
+                pkce_verifier=decrypt_token(row["pkce_verifier_enc"] or "")
+            )
+        else:
+            connection = await adapter.handle_oauth_callback(
+                code=code, redirect_uri=row["redirect_uri"], state=state, tenant_id=row["tenant_id"]
+            )
         if not await adapter.validate_connection(connection):
             raise HTTPException(502, "The platform did not verify this connection.")
         platform_manager.save_connection(connection)
