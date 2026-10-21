@@ -62,9 +62,6 @@ class PlatformManager:
         self.save_connection(connection)
 
     def get_connection(self, connection_id: str, tenant_id: Optional[str] = None) -> Optional[ConnectionRecord]:
-        cached = self._connections.get(connection_id)
-        if cached and (tenant_id is None or cached.tenant_id == tenant_id):
-            return cached
         with self._db() as con:
             row = con.execute("SELECT * FROM connections WHERE id=?", (connection_id,)).fetchone()
         if not row or (tenant_id is not None and row["tenant_id"] != tenant_id):
