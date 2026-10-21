@@ -207,6 +207,17 @@ def agents():
 
 @app.get("/api/auth/token")
 def issue_dashboard_token():
+    # This bootstrap token is only for local demos/tests. Issuing a fixed
+    # administrator identity to anonymous callers is an authentication bypass.
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment not in {"development", "test"}:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Demo token issuance is disabled outside development/test. "
+                "Configure real user authentication before enabling production access."
+            ),
+        )
     user = AuthenticatedUser(
         user_id="usr_dashboard_admin",
         email="admin@workspace.local",
