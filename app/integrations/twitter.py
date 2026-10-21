@@ -31,11 +31,15 @@ class TwitterAdapter(BaseSocialAdapter):
     def connect_url(self, tenant_id: str, scopes: list[str], redirect_uri: str, state: str, pkce_verifier: Optional[str] = None) -> str:
         verifier = pkce_verifier or secrets.token_urlsafe(64)[:96]
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
-        self._pending_pkce[state] = verifier
+        # The verifier is supplied by and persisted with the server-side OAuth state.
         params = {
-            "response_type": "code", "client_id": self.client_id,
-            "redirect_uri": redirect_uri, "scope": " ".join(scopes or ["tweet.read", "tweet.write", "users.read", "offline.access"]),
-            "state": state, "code_challenge": challenge, "code_challenge_method": "S256"
+            "response_type": "code",
+            "client_id": self.client_id,
+            "redirect_uri": redirect_uri,
+            "scope": " ".join(scopes or ["tweet.read", "tweet.write", "users.read", "offline.access"]),
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256"
         }
         return f"{self.auth_url}?{urllib.parse.urlencode(params)}"
 
