@@ -124,3 +124,32 @@ def test_get_nonexistent_run(client):
 def test_approve_nonexistent_run(client):
     res = client.post("/api/runs/non-existent-id/approve")
     assert res.status_code == 404
+
+def test_integration_readiness_never_returns_secrets(client, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://api.example.com")
+    monkeypatch.setenv("LINKEDIN_CLIENT_ID", "visible-id-must-not-leak")
+    monkeypatch.setenv("LINKEDIN_CLIENT_SECRET", "private-linkedin-secret")
+    monkeypatch.setenv("TWITTER_CLIENT_ID", "visible-x-id-must-not-leak")
+    monkeypatch.setenv("TWITTER_CLIENT_SECRET", "private-x-secret")
+    monkeypatch.setenv("SECRET_ENCRYPTION_KEY", "private-encryption-secret")
+    monkeypatch.setenv("JWT_SECRET", "a-long-test-secret-that-is-not-the-default")
+
+    response = client.get("/api/integrations/readiness")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["platforms"]["linkedin"]["oauth_ready"] is True
+    assert data["platforms"]["x"]["oauth_ready"] is True
+    assert data["token_encryption_key_configured"] is True
+    assert "private-linkedin-secret" not in response.text
+    assert "private-x-secret" not in response.text
+    assert "private-encryption-secret" not in response.text
+
+
+def test_linkedin_oauth_requires_client_secret(client, monkeypatch):
+    monkeypatch.setenv("LINKEDIN_CLIENT_ID", "configured-client-id")
+    monkeypatch.delenv("LINKEDIN_CLIENT_SECRET", raising=False)
+    response = client.get("/api/connections/linkedin/connect")
+    assert response.status_code == 503
+    assert "LINKEDIN_CLIENT_SECRET" in response.json()["detail"]
+
