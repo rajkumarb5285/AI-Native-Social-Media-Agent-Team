@@ -1,18 +1,19 @@
+"""Channel-specific social copy formatting and validation."""
 from pydantic import Field, ConfigDict
 from app.agents.base import BaseAgent, AgentInput, AgentOutput
 
 PLATFORM_LIMITS = {
-    "LinkedIn": 3000,
-    "Twitter": 280,
-    "X": 280,
-    "Instagram": 2200,
-    "Facebook": 5000,
-    "YouTube": 1000
+    "linkedin": 3000,
+    "twitter": 280,
+    "x": 280,
+    "instagram": 2200,
+    "facebook": 5000,
+    "youtube": 1000
 }
+
 
 class PlatformPost(AgentInput):
     model_config = ConfigDict(populate_by_name=True)
-
     platform: str
     format: str = "post"
     post_copy: str = Field(default="", alias="copy")
@@ -27,6 +28,7 @@ class PlatformPost(AgentInput):
     def copy(self) -> str:
         return self.post_copy
 
+
 class RepurposingInput(AgentInput):
     flagship_copy: str
     headline: str
@@ -34,47 +36,57 @@ class RepurposingInput(AgentInput):
     call_to_action: str
     platforms: list[str] = Field(default_factory=lambda: ["LinkedIn"])
 
+
 class RepurposingOutput(AgentOutput):
     posts: list[PlatformPost] = Field(default_factory=list)
     total_platforms: int = 0
+
 
 class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
     agent_id = "repurposer"
     name = "Repurposing Agent"
     department = "Content"
-    description = "Adapts the core message into format-optimized copy adhering to channel length limits."
+    description = "Formats campaign copy for supported channel limits and marks unsupported channels."
 
     async def execute(self, input_data: RepurposingInput) -> RepurposingOutput:
         posts = []
-        for plat in input_data.platforms:
-            limit = PLATFORM_LIMITS.get(plat, 2000)
-            if plat.lower() in ("twitter", "x"):
-                copy = f"{input_data.brand}: {input_data.headline[:150]}\n\n{input_data.call_to_action[:80]}"
-                hashtags = ["#Tech", f"#{input_data.brand.replace(' ', '')}"]
-            elif plat.lower() == "instagram":
-                copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n👉 {input_data.call_to_action}\n\nDrop your thoughts below 👇"
-                hashtags = ["#BehindTheScenes", "#Growth", f"#{input_data.brand.replace(' ', '')}"]
-            else: # LinkedIn, Facebook, default
+        errors = []
+        for requested in input_data.platforms:
+            platform = requested.strip()
+            key = platform.lower()
+            if key not in PLATFORM_LIMITS:
+                errors.append(f"Unsupported publishing platform '{platform}'.")
+                continue
+            limit = PLATFORM_LIMITS[key]
+            if key in ("twitter", "x"):
+                copy = f"{input_data.headline}\n\n{input_data.call_to_action}"
+                hashtags = []
+            elif key == "instagram":
                 copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
-                hashtags = ["#Marketing", "#Innovation", "#Leadership"]
-
-            char_count = len(copy)
-            within_limits = char_count <= limit
-
+                hashtags = ["#BehindTheScenes", "#Growth"]
+            else:
+                copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
+                hashtags = ["#Marketing", "#Innovation"]
+            count = len(copy)
             posts.append(PlatformPost(
-                platform=plat,
+                platform=platform,
                 format="social_post",
                 copy=copy,
-                character_count=char_count,
+                character_count=count,
                 char_limit=limit,
-                within_limits=within_limits,
+                within_limits=count <= limit,
                 hashtags=hashtags,
-                media_prompt=f"High quality editorial banner for {input_data.brand} featuring {plat} layout style.",
+                media_prompt=(
+                    f"Create an on-brand campaign visual for {input_data.brand}. "
+                    f"Channel: {platform}. Message: {input_data.headline}. "
+                    "Do not render fake logos, statistics, or unapproved text."
+                ),
                 status="draft"
             ))
-
         return RepurposingOutput(
-            success=True,
+            success=len(errors) == 0,
+            errors=errors,
             posts=posts,
-            total_platforms=len(posts)
+            total_platforms=len(posts),
+            metadata={"supported_platforms": sorted(PLATFORM_LIMITS.keys())}
         )
