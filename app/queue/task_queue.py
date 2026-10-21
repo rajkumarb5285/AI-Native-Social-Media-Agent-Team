@@ -2,6 +2,7 @@ import asyncio
 import json
 import sqlite3
 import datetime
+import os
 from typing import Any, Optional
 from app.queue.broadcaster import broadcaster
 from app.agents.graph import AgentGraph
@@ -136,7 +137,8 @@ class DurableTaskQueue:
                 tone=req_data.get("tone", "clear and helpful"),
                 offer=req_data.get("offer", ""),
                 context=req_data.get("context", ""),
-                approval_required=req_data.get("approval_required", True)
+                approval_required=req_data.get("approval_required", True),
+                live_search_enabled=os.getenv("ENABLE_LIVE_SEARCH", "false").lower() == "true"
             )
 
             # Check if cancelled during graph execution
