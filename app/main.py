@@ -408,8 +408,14 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
     return {"authorization_url": authorization_url, "platform": platform, "redirect_uri": redirect_uri}
 
 @app.get("/api/connections/{platform}/callback")
-async def finish_social_connect(platform: str, code: str, state: str):
+async def finish_social_connect(platform: str, code: str | None = None, state: str | None = None,
+                               error: str | None = None, error_description: str | None = None):
     platform = platform.lower()
+    if error:
+        message = f"Social platform authorization failed: {error}. {error_description or \"\"}".strip()
+        raise HTTPException(400, message)
+    if not code or not state:
+        raise HTTPException(400, "OAuth callback requires both code and state.")
     _oauth_state_table()
     with db() as con:
         columns = {item[1] for item in con.execute("PRAGMA table_info(oauth_states)").fetchall()}
@@ -418,8 +424,9 @@ async def finish_social_connect(platform: str, code: str, state: str):
         row = con.execute("SELECT * FROM oauth_states WHERE state=? AND platform=?", (state, platform)).fetchone()
         if not row:
             raise HTTPException(400, "OAuth state is invalid, expired, or already used.")
-        # One-time state prevents replay; expire stale attempts after 10 minutes.
         created = datetime.datetime.fromisoformat(row["created_at"])
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=datetime.timezone.utc)
         if (datetime.datetime.now(datetime.timezone.utc) - created).total_seconds() > 600:
             con.execute("DELETE FROM oauth_states WHERE state=?", (state,))
             raise HTTPException(400, "OAuth state expired. Start account connection again.")
