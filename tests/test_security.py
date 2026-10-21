@@ -160,3 +160,24 @@ def test_queue_actions_and_stream_are_tenant_scoped(client):
     owner_view = client.get(f"/api/runs/{run_id}", headers=owner_headers)
     assert owner_view.json()["status"] == "cancelled"
 
+
+
+def test_dashboard_bootstrap_token_is_disabled_in_production(client, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    response = client.get("/api/auth/token")
+
+    assert response.status_code == 503
+    assert "disabled outside development/test" in response.json()["detail"]
+    assert "token" not in response.json()
+
+
+def test_dashboard_bootstrap_token_remains_available_in_test_mode(client, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "test")
+
+    response = client.get("/api/auth/token")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["role"] == "admin"
+    assert body["token"]
