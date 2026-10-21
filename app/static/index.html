@@ -12,7 +12,14 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-vis
 button{border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:pointer;background:var(--green);color:#06130e}button.secondary{background:#253142;color:var(--text);border:1px solid #3a4656}button:disabled{opacity:.55;cursor:wait}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}.status{color:var(--amber);font-size:12px}.log{border-bottom:1px solid #222d39;padding:9px 0}.result{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1118;border:1px solid #293443;border-radius:10px;padding:12px;margin-top:8px}.metric{font-size:26px;font-weight:750;letter-spacing:-.03em}.notice{border-left:3px solid var(--amber);padding:10px 12px;background:#251f14;color:#ffe4ac;border-radius:5px;font-size:12px;margin:14px 0}
 @media(max-width:800px){.grid{grid-template-columns:1fr}.wide{grid-column:span 1}.agents{grid-template-columns:1fr}.two{grid-template-columns:1fr}}
 </style></head><body><main>
-<div class="top"><div><h1>AI Native <span style="color:var(--green)">Social Agent Team</span></h1><div class="sub">A coordinated content workflow with transparent run logs and approval gates.</div></div><div class="pill" id="mode" role="status">CONNECTING…</div></div>
+<div class="top"><div><h1>AI Native <span style="color:var(--green)">Social Agent Team</span></h1><div class="sub">A coordinated content workflow with transparent run logs and approval gates.</div></div>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<div class="pill" id="mode" role="status">CONNECTING…</div>
+<div style="display:flex;align-items:center;background:#10151d;border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:12px;gap:6px">
+<span class="muted" style="font-size:11px">API:</span>
+<span id="backendLabel" style="font-family:monospace;color:var(--blue)">local</span>
+<button type="button" id="editBackendBtn" style="background:transparent;border:0;color:var(--muted);padding:0 4px;font-size:11px;cursor:pointer;text-decoration:underline">change</button>
+</div></div></div>
 <div class="notice" id="notice" role="note">Draft-only starter: social publishing, live trend research, and live analytics are not connected. Approving a draft does not publish it.</div>
 <div class="grid">
 <section class="panel" aria-label="Workflow Status"><h2>WORKFLOW STATUS</h2><div class="metric" id="runCount">0</div><div class="muted">Saved workflow runs</div><div style="margin-top:16px" class="metric" id="agentCount">10</div><div class="muted">Implemented workflow roles (not 62 agents)</div></section>
@@ -31,11 +38,41 @@ button{border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:point
 </div></main>
 <script>
 const $=id=>document.getElementById(id);
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('api')) {
+  localStorage.setItem('agent_team_api_base', urlParams.get('api'));
+}
+let apiBase = (localStorage.getItem('agent_team_api_base') || '').replace(/\/+$/, '');
+function updateBackendLabel() {
+  const lbl = $('backendLabel');
+  if (lbl) lbl.textContent = apiBase ? (apiBase.replace(/^https?:\/\//, '').slice(0, 24) + (apiBase.length > 28 ? '…' : '')) : 'local (auto)';
+}
+$('editBackendBtn').onclick = () => {
+  const input = prompt('Enter your Render backend API URL (e.g. https://your-backend.onrender.com) or leave empty for local/proxy:', apiBase);
+  if (input !== null) {
+    apiBase = input.trim().replace(/\/+$/, '');
+    if (apiBase) {
+      localStorage.setItem('agent_team_api_base', apiBase);
+    } else {
+      localStorage.removeItem('agent_team_api_base');
+    }
+    updateBackendLabel();
+    authToken = '';
+    localStorage.removeItem('agent_team_token');
+    $('mode').textContent = 'CONNECTING…';
+    $('mode').style.color = 'var(--muted)';
+    init();
+  }
+};
+function apiUrl(path) {
+  if (!path.startsWith('/')) path = '/' + path;
+  return apiBase ? (apiBase + path) : path;
+}
 let authToken = localStorage.getItem('agent_team_token') || '';
 async function getAuthToken() {
   if (authToken) return authToken;
   try {
-    const res = await fetch('/api/auth/token');
+    const res = await fetch(apiUrl('/api/auth/token'));
     if (res.ok) {
       const data = await res.json();
       authToken = data.token;
@@ -50,14 +87,14 @@ async function getAuthToken() {
 async function api(url,opts={}){
   const token = await getAuthToken();
   const headers = {'Content-Type':'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}), ...(opts.headers || {})};
-  let r = await fetch(url, {...opts, headers});
+  let r = await fetch(apiUrl(url), {...opts, headers});
   if (r.status === 401 && authToken) {
     authToken = '';
     localStorage.removeItem('agent_team_token');
     const fresh = await getAuthToken();
     if (fresh) {
       headers['Authorization'] = 'Bearer ' + fresh;
-      r = await fetch(url, {...opts, headers});
+      r = await fetch(apiUrl(url), {...opts, headers});
     }
   }
   const j = await r.json();
@@ -71,5 +108,6 @@ async function loadRun(id){const r=await api('/api/runs/'+id);render(r)}
 function render(r){$('status').textContent='Run status: '+r.status;const b=r.request?.brand||r.brand||'Campaign';const g=r.request?.goal||r.goal||'';$('output').innerHTML=`<div><strong>${esc(b)}${g?' — '+esc(g):''}</strong><div class="muted">Run ID: ${esc(r.id)}</div></div><div class="result">${esc(JSON.stringify(r.result,null,2))}</div>${r.status==='awaiting_approval'?`<div class="actions"><button type="button" onclick="approve('${r.id}')">Approve draft</button><span class="muted">Approval does not publish content.</span></div>`:''}`;$('logs').innerHTML=(r.logs||[]).map(l=>`<div class="log"><span class="dot"></span><strong>${esc(l.agent)}</strong><div>${esc(l.message)}</div><div class="muted">${esc(l.time)}</div></div>`).join('')||'No logs.'}
 async function approve(id){try{const r=await api('/api/runs/'+id+'/approve',{method:'POST'});$('status').textContent=r.message;await loadRun(id);await history()}catch(e){$('status').textContent=e.message}}
 $('form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const btn=$('runBtn');btn.disabled=true;$('status').textContent='Running workflow…';try{const body={brand:f.get('brand'),goal:f.get('goal'),audience:f.get('audience'),tone:f.get('tone'),offer:f.get('offer'),context:f.get('context'),platforms:f.get('platforms').split(',').map(s=>s.trim()).filter(Boolean),approval_required:f.get('approval_required')==='on'};const r=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});if(!r.request)r.request=body;render(r);await history()}catch(err){$('status').textContent=err.message}finally{btn.disabled=false}});
+updateBackendLabel();
 init();
 </script></body></html>

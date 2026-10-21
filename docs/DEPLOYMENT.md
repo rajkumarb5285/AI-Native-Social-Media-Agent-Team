@@ -110,3 +110,72 @@ Open `http://localhost:8000`. Database data is persisted inside the named volume
 | **LinkedIn Adapter** | Implemented (OAuth2 + ugcPosts) | Client ID & Secret | OAuth URL generation, token refresh, and connection validation active; publishing blocked without verified connection and human approval |
 | **Twitter / X Adapter** | Implemented (OAuth2 PKCE + Tweets v2) | Client ID & Secret | Token encryption at rest active; publishing blocked without verified connection and human approval |
 | **Analytics Engine** | Implemented | Platform API tokens | Labels baseline planning targets vs real API metrics |
+
+---
+
+## 6. Render Backend & Vercel Frontend Deployment
+
+This SaaS is architected as a decoupled system: the FastAPI backend runs on **Render** (or Docker container hosts), and the dashboard frontend runs on **Vercel** (or any static edge CDN).
+
+### Part A: Deploying Backend & Multi-Agent Team to Render
+
+#### Method 1: Using the Render Blueprint (Recommended)
+1. Go to [dashboard.render.com](https://dashboard.render.com/) and click **New > Blueprint**.
+2. Connect your GitHub repository (`AI-Native-Social-Media-Agent-Team`).
+3. Render automatically detects [`render.yaml`](file:///c:/Users/Rajkumar%20Pandey/Downloads/ai-native-social-agent-team/ai-native-social-agent-team/render.yaml) and configures:
+   - **Service Name**: `ai-native-social-agent-team`
+   - **Runtime**: Python 3.11
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Health Check Path**: `/api/health`
+4. If you have an OpenAI/LLM API key, set `LLM_API_KEY` under Environment Variables. (If left blank, the backend operates in transparent demo mode).
+5. Click **Apply**. Once built, Render will assign a public HTTPS URL (e.g. `https://ai-native-social-agent-team.onrender.com`).
+
+#### Method 2: Manual Web Service Creation on Render
+1. Click **New > Web Service**.
+2. Connect `https://github.com/rajkumarb5285/AI-Native-Social-Media-Agent-Team`.
+3. Set configuration:
+   - **Name**: `ai-native-social-agent-team`
+   - **Runtime**: `Python`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+4. Add Environment Variables:
+   - `ENVIRONMENT` = `production`
+   - `CORS_ORIGINS` = `*` (or your Vercel URL)
+   - `JWT_SECRET` = *(Generate random string)*
+   - `SECRET_ENCRYPTION_KEY` = *(Generate random 32-byte string)*
+   - `LLM_API_KEY` = *(Optional)*
+5. Click **Create Web Service**.
+
+---
+
+### Part B: Deploying Frontend Dashboard to Vercel
+
+#### Method 1: Direct GitHub Integration
+1. Log in to [vercel.com](https://vercel.com/) and click **Add New > Project**.
+2. Import `https://github.com/rajkumarb5285/AI-Native-Social-Media-Agent-Team`.
+3. In Project Settings:
+   - **Framework Preset**: `Other`
+   - **Root Directory**: `frontend` (or leave as `.` since root `vercel.json` maps to `frontend`)
+4. Click **Deploy**. Vercel will build and assign a production URL (e.g. `https://ai-native-social-agent-team.vercel.app`).
+
+#### Method 2: Command Line Deployment
+```bash
+cd frontend
+npx vercel --prod
+```
+
+---
+
+### Part C: Connecting the Vercel Frontend to the Render Backend
+
+The frontend supports zero-downtime dynamic backend binding:
+1. **Interactive UI Switcher**:
+   - Open your deployed Vercel URL.
+   - Click **change** next to **API:** in the top header.
+   - Paste your Render URL (e.g. `https://ai-native-social-agent-team.onrender.com`). The browser will save this in `localStorage` and immediately query your cloud backend.
+2. **One-Click Shareable Link**:
+   - Append `?api=https://your-backend.onrender.com` to your Vercel URL:
+     `https://your-frontend.vercel.app?api=https://ai-native-social-agent-team.onrender.com`
+   - The dashboard will auto-configure and remember the backend endpoint.
+

@@ -1,0 +1,9 @@
+{
+  "name": "ai-native-social-agent-team-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web dashboard UI for AI Native Social Media Agent Team SaaS",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

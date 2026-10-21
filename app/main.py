@@ -167,7 +167,29 @@ async def lifespan(app_instance: FastAPI):
     yield
     await task_queue.stop()
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title=APP_NAME, version="0.1.0", description="Multi-agent social content workflow starter", lifespan=lifespan)
+
+cors_origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
+if cors_origins_raw == "*":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent/"static")), name="static")
 
 @app.get("/", response_class=HTMLResponse)
