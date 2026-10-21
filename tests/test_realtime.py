@@ -3,6 +3,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app, init_db, task_queue
+from app.security.auth import create_jwt, AuthenticatedUser
+from app.security.rbac import Role
 
 @pytest.fixture(autouse=True)
 def setup_test_db(tmp_path, monkeypatch):
@@ -12,7 +14,10 @@ def setup_test_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    test_user = AuthenticatedUser(user_id="realtime-test-user", email="realtime-test@example.com", role=Role.ADMIN.value, tenant_id="realtime-test-tenant")
+    test_client = TestClient(app)
+    test_client.headers.update({"Authorization": f"Bearer {create_jwt(test_user)}"})
+    return test_client
 
 def test_async_queue_and_status(client):
     payload = {
