@@ -72,6 +72,7 @@ from app.security.rate_limit import check_rate_limit
 from app.integrations.manager import platform_manager
 from app.integrations.base import ConnectionRecord
 from urllib.parse import urlparse
+from app.services.llm.factory import get_llm_provider
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
@@ -123,6 +124,9 @@ async def run_workflow(req: RunRequest):
     result = {
         "workflow_id": execution.workflow_id,
         "research_brief": execution.market_radar.hypothesis_summary,
+        "research_citations": [citation.model_dump() for citation in execution.market_radar.citations],
+        "research_is_live": execution.market_radar.is_live_search,
+        "content_generation_mode": execution.content_engine.generation_mode,
         "content": platform_posts,
         "flagship_narrative": {
             "headline": execution.content_engine.flagship_headline,
