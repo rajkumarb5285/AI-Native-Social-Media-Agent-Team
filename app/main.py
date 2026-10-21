@@ -374,6 +374,45 @@ def list_connections(user: AuthenticatedUser = Depends(get_current_user)):
     conns = platform_manager.list_connections(user.tenant_id)
     return {"connections": [c.model_dump(exclude={"encrypted_access_token", "encrypted_refresh_token"}) for c in conns]}
 
+@app.get("/api/integrations/readiness")
+def integration_readiness(user: AuthenticatedUser = Depends(require_role(["admin"]))):
+    """Return configuration readiness without ever returning credential values."""
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    public_base = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    parsed_base = urlparse(public_base) if public_base else None
+    callback_base_ready = bool(parsed_base and parsed_base.netloc and (
+        parsed_base.scheme == "https" or environment in {"development", "test"}
+    ))
+    linkedin_id = bool(os.getenv("LINKEDIN_CLIENT_ID", "").strip())
+    linkedin_secret = bool(os.getenv("LINKEDIN_CLIENT_SECRET", "").strip())
+    x_id = bool(os.getenv("TWITTER_CLIENT_ID", "").strip())
+    encryption_key = bool(os.getenv("SECRET_ENCRYPTION_KEY", "").strip())
+    jwt_secret = os.getenv("JWT_SECRET", "").strip()
+    return {
+        "environment": environment,
+        "callback_base_configured": callback_base_ready,
+        "token_encryption_key_configured": encryption_key,
+        "jwt_secret_configured": len(jwt_secret) >= 32 and not jwt_secret.startswith("replace-with-"),
+        "platforms": {
+            "linkedin": {
+                "client_id_configured": linkedin_id,
+                "client_secret_configured": linkedin_secret,
+                "oauth_ready": linkedin_id and linkedin_secret and callback_base_ready and encryption_key,
+                "text_publishing_supported": True,
+                "media_publishing_supported": False,
+            },
+            "x": {
+                "client_id_configured": x_id,
+                "client_secret_configured": bool(os.getenv("TWITTER_CLIENT_SECRET", "").strip()),
+                "oauth_ready": x_id and callback_base_ready and encryption_key,
+                "text_publishing_supported": True,
+                "media_publishing_supported": False,
+            },
+        },
+        "live_account_test_required": True,
+        "note": "Readiness checks only inspect configuration. They do not prove platform credentials or live API access are valid.",
+    }
+
 @app.get("/api/connections/{platform}/connect")
 def start_social_connect(platform: str, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
     platform = platform.lower()
@@ -383,6 +422,8 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
     client_id_name = "LINKEDIN_CLIENT_ID" if platform == "linkedin" else "TWITTER_CLIENT_ID"
     if not os.getenv(client_id_name, "").strip():
         raise HTTPException(503, f"{client_id_name} is not configured.")
+    if platform == "linkedin" and not os.getenv("LINKEDIN_CLIENT_SECRET", "").strip():
+        raise HTTPException(503, "LINKEDIN_CLIENT_SECRET is not configured.")
     public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     parsed_base = urlparse(public_base) if public_base else None
     if not public_base:
