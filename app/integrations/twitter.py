@@ -27,7 +27,6 @@ class TwitterAdapter(BaseSocialAdapter):
         self.api_base = "https://api.twitter.com/2"
         # OAuth PKCE values must be generated per attempt and stored server-side.
         self._pending_pkce: dict[str, str] = {}
-        self._db_path_getter = lambda: os.getenv("DATABASE_PATH", "./agent_runs.db")
 
     def connect_url(self, tenant_id: str, scopes: list[str], redirect_uri: str, state: str, pkce_verifier: Optional[str] = None) -> str:
         verifier = pkce_verifier or secrets.token_urlsafe(64)[:96]
