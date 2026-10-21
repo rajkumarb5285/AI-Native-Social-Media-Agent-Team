@@ -68,6 +68,11 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
                 copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
                 hashtags = ["#Marketing", "#Innovation"]
             count = len(copy)
+            media_prompt = (
+                f"Create an on-brand campaign visual for {input_data.brand}. "
+                f"Channel: {platform}. Message: {input_data.headline}. "
+                "Do not render fake logos, statistics, or unapproved text."
+            )
             posts.append(PlatformPost(
                 platform=platform,
                 format="social_post",
@@ -76,11 +81,7 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
                 char_limit=limit,
                 within_limits=count <= limit,
                 hashtags=hashtags,
-                media_prompt=(
-                    f"Create an on-brand campaign visual for {input_data.brand}. "
-                    f"Channel: {platform}. Message: {input_data.headline}. "
-                    "Do not render fake logos, statistics, or unapproved text."
-                ),
+                media_prompt=media_prompt,
                 status="draft"
             ))
         return RepurposingOutput(
