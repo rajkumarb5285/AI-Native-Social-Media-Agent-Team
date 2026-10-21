@@ -56,6 +56,8 @@ async def test_platform_manager_publish_and_idempotency():
         is_active=True
     )
     mgr.register_connection(conn)
+    assert mgr.get_connection("conn_li_test", tenant_id="tenant_abc") is not None
+    assert mgr.get_connection("conn_li_test", tenant_id="tenant_other") is None
 
     # Publish to registered connection
     res = await mgr.publish(
