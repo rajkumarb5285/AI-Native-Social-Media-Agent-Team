@@ -127,3 +127,22 @@ def test_persisted_platform_connection(tmp_path, monkeypatch):
     assert restored.account_name == "Test LinkedIn"
     assert decrypt_token(restored.encrypted_access_token) == "test_token"
     assert fresh_manager.get_connection("conn_persisted_test", tenant_id="other_tenant") is None
+
+
+def test_twitter_pkce_uses_supplied_verifier_without_process_state():
+    import urllib.parse
+    import hashlib
+    import base64
+    adapter = TwitterAdapter(client_id="test_tw_client")
+    verifier = "test-verifier-from-durable-state-123456789"
+    url = adapter.connect_url(
+        tenant_id="tenant_1",
+        scopes=["tweet.write"],
+        redirect_uri="https://api.example.com/callback",
+        state="durable-state",
+        pkce_verifier=verifier
+    )
+    params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
+    assert params["code_challenge"] == [expected]
+    assert params["code_challenge_method"] == ["S256"]
