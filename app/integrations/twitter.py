@@ -44,7 +44,9 @@ class TwitterAdapter(BaseSocialAdapter):
         return f"{self.auth_url}?{urllib.parse.urlencode(params)}"
 
     async def handle_oauth_callback(self, code: str, redirect_uri: str, state: str, tenant_id: str, pkce_verifier: Optional[str] = None) -> ConnectionRecord:
-        if not pkce_verifier:
+        # OAuth state handler supplies the persisted verifier; memory is deliberately not trusted.
+        verifier = pkce_verifier
+        if not verifier:
             raise ValueError("OAuth PKCE verifier missing. Restart account connection.")
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
@@ -54,7 +56,7 @@ class TwitterAdapter(BaseSocialAdapter):
                     "grant_type": "authorization_code",
                     "client_id": self.client_id,
                     "redirect_uri": redirect_uri,
-                    "code_verifier": pkce_verifier
+                    "code_verifier": verifier
                 },
                 auth=(self.client_id, self.client_secret) if self.client_secret else None,
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
