@@ -31,6 +31,6 @@ jobs:
         env:
           ENVIRONMENT: test
           JWT_SECRET: test-only-secret-that-is-long-enough
-          TOKEN_ENCRYPTION_KEY: test-only-encryption-secret
+          SECRET_ENCRYPTION_KEY: test-only-encryption-secret
           DATABASE_PATH: ./test-agent-runs.db
         run: pytest -q
