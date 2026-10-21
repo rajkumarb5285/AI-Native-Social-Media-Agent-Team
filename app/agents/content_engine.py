@@ -41,6 +41,8 @@ class ContentEngineAgent(BaseAgent[ContentEngineInput, ContentEngineOutput]):
         goal = input_data.goal.strip()
         voice = input_data.voice_profile.model_dump() if input_data.voice_profile else {}
         facts = [item.strip() for item in input_data.source_facts if item.strip()]
+        if input_data.offer.strip():
+            facts.append(f"Offer supplied by the user: {input_data.offer.strip()}")
 
         if provider is not None:
             system = (
