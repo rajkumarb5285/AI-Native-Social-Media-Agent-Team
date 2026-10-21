@@ -6,7 +6,7 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))"
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -26,9 +26,9 @@ services:
       - key: LLM_API_KEY
         sync: false
       - key: LLM_MODEL
-        value: gpt-4.1-mini
+        value: openai/gpt-oss-120b
       - key: LLM_BASE_URL
-        value: https://api.openai.com/v1
+        value: https://api.groq.com/openai/v1
       - key: LLM_TIMEOUT_SECONDS
         value: "45"
       - key: ENABLE_LIVE_SEARCH

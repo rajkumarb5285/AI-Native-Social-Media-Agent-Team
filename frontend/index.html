@@ -43,6 +43,9 @@ if (urlParams.get('api')) {
   localStorage.setItem('agent_team_api_base', urlParams.get('api'));
 }
 let apiBase = (localStorage.getItem('agent_team_api_base') || '').replace(/\/+$/, '');
+if (!apiBase && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.origin.includes(':8000')) {
+  apiBase = 'https://ai-native-social-agent-team.onrender.com';
+}
 function updateBackendLabel() {
   const lbl = $('backendLabel');
   if (lbl) lbl.textContent = apiBase ? (apiBase.replace(/^https?:\/\//, '').slice(0, 24) + (apiBase.length > 28 ? '…' : '')) : 'local (auto)';
