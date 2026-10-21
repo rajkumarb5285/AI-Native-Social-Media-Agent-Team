@@ -31,6 +31,17 @@ class PlatformManager:
         con.row_factory = sqlite3.Row
         return con
 
+    def _load_all_connections(self):
+        with self._db() as con:
+            rows = con.execute("SELECT * FROM connections WHERE is_active=1").fetchall()
+        for row in rows:
+            self._connections[row["id"]] = ConnectionRecord(
+                connection_id=row["id"], tenant_id=row["tenant_id"], platform=row["platform"],
+                account_name=row["account_name"], encrypted_access_token=row["encrypted_access_token"],
+                encrypted_refresh_token=row["encrypted_refresh_token"], expires_at=row["expires_at"],
+                scopes=json.loads(row["scopes_json"] or "[]"), is_active=bool(row["is_active"]),
+                created_at=row["created_at"], updated_at=row["updated_at"]
+            )
     def get_adapter(self, platform: str) -> Optional[BaseSocialAdapter]:
         return self._adapters.get(platform.lower())
 
