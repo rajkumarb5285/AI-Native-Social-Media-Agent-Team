@@ -4,7 +4,11 @@ import urllib.parse
 import secrets
 import hashlib
 import base64
+import json
+import sqlite3
+import datetime
 import httpx
+from app.db.migrations import run_migrations
 from typing import Optional
 from app.integrations.base import (
     BaseSocialAdapter, ConnectionRecord, PlatformPublishResult, PlatformMetricsResult, now_iso
@@ -23,12 +27,22 @@ class TwitterAdapter(BaseSocialAdapter):
         self.api_base = "https://api.twitter.com/2"
         # OAuth PKCE values must be generated per attempt and stored server-side.
         self._pending_pkce: dict[str, str] = {}
-        self._pending_pkce_persisted = False
+        self._db_path_getter = lambda: os.getenv("DATABASE_PATH", "./agent_runs.db")
 
     def connect_url(self, tenant_id: str, scopes: list[str], redirect_uri: str, state: str) -> str:
         verifier = secrets.token_urlsafe(64)[:96]
         digest = hashlib.sha256(verifier.encode("ascii")).digest()
         challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+        # Store the verifier in the same durable database as OAuth state so callbacks
+        # still work when deployment uses multiple workers or restarts between redirects.
+        db_path = self._db_path_getter()
+        run_migrations(db_path)
+        with sqlite3.connect(db_path) as con:
+            con.execute("""CREATE TABLE IF NOT EXISTS oauth_pkce (
+                state TEXT PRIMARY KEY, verifier_encrypted TEXT NOT NULL, created_at TEXT NOT NULL
+            )""")
+            con.execute("INSERT OR REPLACE INTO oauth_pkce(state, verifier_encrypted, created_at) VALUES(?,?,?)",
+                        (state, encrypt_token(verifier), datetime.datetime.now(datetime.timezone.utc).isoformat()))
         self._pending_pkce[state] = verifier
         effective_scopes = " ".join(scopes or ["tweet.read", "tweet.write", "users.read", "offline.access"])
         params = {
@@ -44,6 +58,17 @@ class TwitterAdapter(BaseSocialAdapter):
 
     async def handle_oauth_callback(self, code: str, redirect_uri: str, state: str, tenant_id: str) -> ConnectionRecord:
         verifier = self._pending_pkce.pop(state, None)
+        db_path = self._db_path_getter()
+        run_migrations(db_path)
+        with sqlite3.connect(db_path) as con:
+            con.row_factory = sqlite3.Row
+            row = con.execute("SELECT verifier_encrypted, created_at FROM oauth_pkce WHERE state=?", (state,)).fetchone()
+            con.execute("DELETE FROM oauth_pkce WHERE state=?", (state,))
+        if row:
+            created_at = datetime.datetime.fromisoformat(row["created_at"])
+            if (datetime.datetime.now(datetime.timezone.utc) - created_at).total_seconds() > 600:
+                raise ValueError("OAuth PKCE verifier expired. Restart account connection.")
+            verifier = decrypt_token(row["verifier_encrypted"])
         if not verifier:
             raise ValueError("OAuth PKCE verifier missing or expired. Restart account connection.")
         async with httpx.AsyncClient(timeout=15.0) as client:
