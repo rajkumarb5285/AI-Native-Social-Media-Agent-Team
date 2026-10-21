@@ -252,15 +252,16 @@ def get_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
             "retry_count":r["retry_count"] if "retry_count" in r.keys() else 0}
 
 @app.get("/api/runs/{run_id}/stream")
-async def stream_run(run_id: str):
+async def stream_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    # Authorize before opening the streaming response; run IDs are not credentials.
     with db() as con:
-        r = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        r = con.execute("SELECT id FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
     if not r:
         raise HTTPException(404, "Run not found")
 
     async def event_generator():
         with db() as con:
-            curr = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+            curr = con.execute("SELECT * FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
         if curr:
             snapshot = {
                 "event": "snapshot",
@@ -286,6 +287,11 @@ async def stream_run(run_id: str):
 
 @app.post("/api/runs/{run_id}/cancel")
 async def cancel_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    # Check ownership before invoking the queue, which operates on global run IDs.
+    with db() as con:
+        owned_run = con.execute("SELECT id FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
+    if not owned_run:
+        raise HTTPException(404, "Run not found")
     success = await task_queue.cancel(run_id)
     if not success:
         with db() as con:
@@ -298,6 +304,11 @@ async def cancel_run(run_id: str, user: AuthenticatedUser = Depends(get_current_
 
 @app.post("/api/runs/{run_id}/retry")
 async def retry_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    # Do not let one tenant re-queue another tenant's workflow.
+    with db() as con:
+        owned_run = con.execute("SELECT id FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
+    if not owned_run:
+        raise HTTPException(404, "Run not found")
     success = await task_queue.retry(run_id)
     if not success:
         with db() as con:
@@ -332,6 +343,8 @@ async def publish_run(run_id: str, user: AuthenticatedUser = Depends(require_rol
     if not posts:
         raise HTTPException(409, "This run has no stored content to publish.")
     connections = platform_manager.list_connections(user.tenant_id)
+    if not connections:
+        raise HTTPException(412, "No verified official platform connections are available for this workspace.")
     publish_outcomes = []
     for post in posts:
         platform = str(post.get("platform", "")).lower()
