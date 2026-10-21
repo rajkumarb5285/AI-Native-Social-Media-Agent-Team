@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app, init_db
 from app.security.auth import create_jwt, AuthenticatedUser
 from app.security.rbac import Role
+from app.security.auth import verify_jwt
 
 @pytest.fixture(autouse=True)
 def setup_test_db(tmp_path, monkeypatch):
@@ -13,6 +14,18 @@ def setup_test_db(tmp_path, monkeypatch):
 @pytest.fixture
 def client():
     return TestClient(app)
+
+def test_jwt_rejects_tampered_signature():
+    user = AuthenticatedUser(user_id="secure_user", email="secure@example.com", role=Role.ADMIN.value, tenant_id="secure_tenant")
+    token = create_jwt(user)
+    parts = token.split(".")
+    parts[1] = parts[1][:-1] + ("A" if parts[1][-1] != "A" else "B")
+    tampered = ".".join(parts)
+    assert verify_jwt(tampered) is None
+
+def test_missing_authentication_is_rejected(client):
+    res = client.get("/api/runs")
+    assert res.status_code == 401
 
 def test_tenant_isolation(client):
     # Tenant A creates a run
