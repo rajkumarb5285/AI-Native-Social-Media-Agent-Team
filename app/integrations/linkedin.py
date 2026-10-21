@@ -5,6 +5,7 @@ not claimed as supported yet; they need LinkedIn asset upload registration and m
 URNs before publishing an image or video.
 """
 import os
+import datetime
 import uuid
 import urllib.parse
 import httpx
@@ -49,7 +50,6 @@ class LinkedInAdapter(BaseSocialAdapter):
             data = resp.json()
         access_token = data["access_token"]
         expires_in = data.get("expires_in", 5184000)
-        import datetime
         expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)).isoformat()
         return ConnectionRecord(
             connection_id=f"conn_li_{uuid.uuid4().hex[:12]}",
@@ -77,6 +77,12 @@ class LinkedInAdapter(BaseSocialAdapter):
         connection.encrypted_access_token = encrypt_token(data["access_token"])
         if data.get("refresh_token"):
             connection.encrypted_refresh_token = encrypt_token(data["refresh_token"])
+        expires_in = data.get("expires_in", 3600)
+        connection.expires_at = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
+        ).isoformat()
+        if data.get("scope"):
+            connection.scopes = data["scope"].split(" ")
         connection.updated_at = now_iso()
         return connection
 
