@@ -28,26 +28,12 @@ class TwitterAdapter(BaseSocialAdapter):
         verifier = pkce_verifier or secrets.token_urlsafe(64)[:96]
         digest = hashlib.sha256(verifier.encode("ascii")).digest()
         challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
-        # Store the verifier in the same durable database as OAuth state so callbacks
-        # still work when deployment uses multiple workers or restarts between redirects.
-        db_path = self._db_path_getter()
-        run_migrations(db_path)
-        with sqlite3.connect(db_path) as con:
-            con.execute("""CREATE TABLE IF NOT EXISTS oauth_pkce (
-                state TEXT PRIMARY KEY, verifier_encrypted TEXT NOT NULL, created_at TEXT NOT NULL
-            )""")
-            con.execute("INSERT OR REPLACE INTO oauth_pkce(state, verifier_encrypted, created_at) VALUES(?,?,?)",
-                        (state, encrypt_token(verifier), datetime.datetime.now(datetime.timezone.utc).isoformat()))
         self._pending_pkce[state] = verifier
         effective_scopes = " ".join(scopes or ["tweet.read", "tweet.write", "users.read", "offline.access"])
         params = {
-            "response_type": "code",
-            "client_id": self.client_id,
-            "redirect_uri": redirect_uri,
-            "scope": effective_scopes,
-            "state": state,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256"
+            "response_type": "code", "client_id": self.client_id,
+            "redirect_uri": redirect_uri, "scope": effective_scopes, "state": state,
+            "code_challenge": challenge, "code_challenge_method": "S256"
         }
         return f"{self.auth_url}?{urllib.parse.urlencode(params)}"
 
