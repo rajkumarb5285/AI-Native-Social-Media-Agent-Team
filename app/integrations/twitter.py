@@ -86,6 +86,12 @@ class TwitterAdapter(BaseSocialAdapter):
         connection.encrypted_access_token = encrypt_token(data["access_token"])
         if data.get("refresh_token"):
             connection.encrypted_refresh_token = encrypt_token(data["refresh_token"])
+        expires_in = data.get("expires_in", 3600)
+        connection.expires_at = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
+        ).isoformat()
+        if data.get("scope"):
+            connection.scopes = data["scope"].split(" ")
         connection.updated_at = now_iso()
         return connection
 
