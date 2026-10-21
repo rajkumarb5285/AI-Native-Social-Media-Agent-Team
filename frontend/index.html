@@ -1507,26 +1507,6 @@
       });
     });
 
-    // Connected Accounts Management
-    let currentConnections = [];
-
-    async function loadConnections() {
-      try {
-        const data = await api('/api/connections');
-        currentConnections = data.connections || [];
-        const badge = $('connBadge');
-        if (badge) badge.textContent = currentConnections.length;
-        renderAccountsModal();
-      } catch (err) {
-        console.error('Failed to load connections', err);
-      }
-    }
-
-    function toggleAccountsModal(show) {
-      const modal = $('accountsModal');
-      if (!modal) return;
-      modal.style.display = show ? 'flex' : 'none';
-      if (show) loadConnections();
     // Auth State & Actions
     let currentUser = null;
     let authTab = 'login';
