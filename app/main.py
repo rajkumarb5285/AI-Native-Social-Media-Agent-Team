@@ -1,0 +1,352 @@
+import os, json, sqlite3, uuid, datetime, asyncio
+from pathlib import Path
+from typing import Any
+import httpx
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+load_dotenv()
+APP_NAME = os.getenv("APP_NAME", "AI Native Social Agent Team")
+DB_PATH = os.getenv("DATABASE_PATH", "./agent_runs.db")
+API_KEY = os.getenv("LLM_API_KEY", "").strip()
+BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
+TIMEOUT = float(os.getenv("LLM_TIMEOUT_SECONDS", "45"))
+DEMO_MODE = not bool(API_KEY)
+
+AGENTS = [
+    {"id": "orchestrator", "name": "Orchestrator", "department": "Operations", "purpose": "Plans, validates, and coordinates multi-agent workflow execution.", "status": "ready"},
+    {"id": "market-radar", "name": "MarketRadar", "department": "Research", "purpose": "Synthesizes audience research, market hypotheses, and content angles.", "status": "ready"},
+    {"id": "brand-memory", "name": "BrandMemory", "department": "Governance", "purpose": "Enforces tenant-scoped brand guidelines, tone rules, and banned vocabulary.", "status": "ready"},
+    {"id": "content-engine", "name": "Content Engine", "department": "Content", "purpose": "Drafts authoritative flagship messaging and campaign narratives.", "status": "ready"},
+    {"id": "repurposer", "name": "Repurposing Agent", "department": "Content", "purpose": "Adapts core messaging into channel-optimized formats with length verification.", "status": "ready"},
+    {"id": "quality-gate", "name": "Quality Gate", "department": "Governance", "purpose": "Automated checks for character limits, compliance, tone, and prohibited terms.", "status": "ready"},
+    {"id": "approval-gate", "name": "Approval Gate", "department": "Governance", "purpose": "Enforces authorized human review and sign-off before external writes.", "status": "ready"},
+    {"id": "publishing", "name": "Publishing Agent", "department": "Operations", "purpose": "Dispatches approved drafts to verified official APIs with idempotency keys.", "status": "ready"},
+    {"id": "analytics", "name": "Analytics Agent", "department": "Analytics", "purpose": "Defines KPI frameworks and retrieves verified metrics via platform APIs.", "status": "ready"},
+    {"id": "reporting", "name": "Reporting Agent", "department": "Operations", "purpose": "Synthesizes continuous performance audits and strategic next actions.", "status": "ready"},
+]
+
+from contextlib import asynccontextmanager
+from app.agents.graph import AgentGraph
+
+agent_graph = AgentGraph()
+
+def clean_and_parse_json(raw: str) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 2 and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
+
+class RunRequest(BaseModel):
+    brand: str = Field(min_length=1, max_length=120)
+    goal: str = Field(min_length=1, max_length=600)
+    platforms: list[str] = Field(default_factory=lambda: ["LinkedIn"], min_length=1, max_length=6)
+    audience: str = Field(default="general audience", max_length=300)
+    tone: str = Field(default="clear and helpful", max_length=120)
+    offer: str = Field(default="", max_length=400)
+    context: str = Field(default="", max_length=4000)
+    approval_required: bool = True
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def db():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    return con
+
+from fastapi import Depends
+from app.db.migrations import run_migrations
+from app.security.auth import get_current_user, require_role, AuthenticatedUser
+from app.security.audit import AuditLogger
+from app.security.rate_limit import check_rate_limit
+from app.integrations.manager import platform_manager
+
+audit_logger = AuditLogger(lambda: DB_PATH)
+
+def init_db():
+    run_migrations(DB_PATH)
+
+async def call_llm(system: str, user: str) -> str:
+    if not API_KEY:
+        return ""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.post(
+            f"{BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type":"application/json"},
+            json={"model": MODEL, "temperature": 0.4, "messages":[
+                {"role":"system","content":system},{"role":"user","content":user}
+            ]},
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+async def run_workflow(req: RunRequest):
+    execution = await agent_graph.run(
+        brand=req.brand,
+        goal=req.goal,
+        platforms=req.platforms,
+        audience=req.audience,
+        tone=req.tone,
+        offer=req.offer,
+        context=req.context,
+        approval_required=req.approval_required
+    )
+
+    platform_posts = []
+    for post in execution.repurposer.posts:
+        platform_posts.append({
+            "platform": post.platform,
+            "format": post.format,
+            "copy": post.copy,
+            "hashtags": post.hashtags,
+            "character_count": post.character_count,
+            "char_limit": post.char_limit,
+            "within_limits": post.within_limits,
+            "media_prompt": post.media_prompt,
+            "status": post.status
+        })
+
+    result = {
+        "workflow_id": execution.workflow_id,
+        "research_brief": execution.market_radar.hypothesis_summary,
+        "content": platform_posts,
+        "flagship_narrative": {
+            "headline": execution.content_engine.flagship_headline,
+            "core_copy": execution.content_engine.flagship_copy,
+            "call_to_action": execution.content_engine.call_to_action
+        },
+        "quality_review": {
+            "score": execution.quality_gate.compliance_score,
+            "passed": execution.quality_gate.passed,
+            "checks": [f"{c.check_name}: {c.details}" for c in execution.quality_gate.checks],
+            "blockers": execution.quality_gate.blockers,
+            "warnings": execution.quality_gate.warnings
+        },
+        "approval_status": {
+            "status": execution.approval_gate.status,
+            "notes": execution.approval_gate.audit_notes
+        },
+        "publishing_summary": {
+            "draft_only_mode": execution.publishing.draft_only_mode,
+            "audit_summary": execution.publishing.audit_summary
+        },
+        "measurement_plan": {
+            "primary_kpi": execution.analytics.primary_kpi,
+            "secondary_kpis": execution.analytics.secondary_kpis,
+            "note": execution.analytics.measurement_plan_notes
+        },
+        "next_actions": execution.reporting.recommended_next_actions
+    }
+
+    logs = [
+        {"time": l.time, "agent": l.agent, "message": l.message, "status": l.status}
+        for l in execution.logs
+    ]
+    return result, logs
+
+from fastapi.responses import HTMLResponse, StreamingResponse
+from app.queue.task_queue import DurableTaskQueue
+from app.queue.broadcaster import broadcaster
+
+task_queue = DurableTaskQueue(lambda: DB_PATH)
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    init_db()
+    task_queue.start()
+    yield
+    await task_queue.stop()
+
+app = FastAPI(title=APP_NAME, version="0.1.0", description="Multi-agent social content workflow starter", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent/"static")), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return (Path(__file__).parent/"static"/"index.html").read_text(encoding="utf-8")
+
+@app.get("/api/health")
+def health():
+    return {"status":"ok","mode":"demo" if DEMO_MODE else "llm-enabled","model":MODEL if API_KEY else None,"time":now(),
+            "integrations":{"social_publishing":False,"live_market_research":False,"live_analytics":False}}
+
+@app.get("/api/agents")
+def agents():
+    return {"agents":AGENTS,"note":"Ten implemented specialist workflow roles."}
+
+@app.get("/api/runs")
+def list_runs(user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        rows = con.execute(
+            "SELECT id,created_at,updated_at,status,request_json,approved,retry_count FROM runs WHERE tenant_id=? ORDER BY created_at DESC LIMIT 50",
+            (user.tenant_id,)
+        ).fetchall()
+    return {"runs":[{"id":r["id"],"created_at":r["created_at"],"updated_at":r["updated_at"],"status":r["status"],
+                     "request":json.loads(r["request_json"]),"approved":bool(r["approved"]),
+                     "retry_count":r["retry_count"] if "retry_count" in r.keys() else 0} for r in rows]}
+
+@app.post("/api/runs")
+async def create_run(req: RunRequest, sync: bool = True, user: AuthenticatedUser = Depends(get_current_user)):
+    run_id=str(uuid.uuid4())
+    with db() as con:
+        con.execute(
+            "INSERT INTO runs(id,created_at,updated_at,status,request_json,logs_json,approved,retry_count,tenant_id) VALUES(?,?,?,?,?,?,?,?,?)",
+            (run_id,now(),now(),"queued" if not sync else "running",req.model_dump_json(),"[]",0,0,user.tenant_id)
+        )
+
+    audit_logger.log(user.tenant_id, user.user_id, "WORKFLOW_CREATED", run_id, {"brand": req.brand, "platforms": req.platforms})
+
+    if not sync:
+        await task_queue.enqueue(run_id)
+        return {
+            "id": run_id,
+            "status": "queued",
+            "stream_url": f"/api/runs/{run_id}/stream",
+            "mode": "demo" if DEMO_MODE else "llm-enabled"
+        }
+
+    try:
+        result, logs = await run_workflow(req)
+        status = "awaiting_approval" if req.approval_required else "draft_ready"
+        with db() as con:
+            con.execute("UPDATE runs SET updated_at=?,status=?,result_json=?,logs_json=? WHERE id=?",
+                        (now(),status,json.dumps(result),json.dumps(logs),run_id))
+        return {"id":run_id,"status":status,"request":req.model_dump(),"result":result,"logs":logs,"mode":"demo" if DEMO_MODE else "llm-enabled"}
+    except httpx.HTTPError as e:
+        with db() as con:
+            con.execute("UPDATE runs SET updated_at=?,status=?,logs_json=? WHERE id=?",
+                        (now(),"failed",json.dumps([{"time":now(),"agent":"system","message":str(e),"status":"failed"}]),run_id))
+        raise HTTPException(502, "LLM provider request failed. Check API key, base URL, model access, and provider status.")
+    except Exception as e:
+        with db() as con:
+            con.execute("UPDATE runs SET updated_at=?,status=?,logs_json=? WHERE id=?",
+                        (now(),"failed",json.dumps([{"time":now(),"agent":"system","message":str(e),"status":"failed"}]),run_id))
+        raise HTTPException(500, f"Workflow failed: {str(e)}")
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        r=con.execute("SELECT * FROM runs WHERE id=? AND tenant_id=?",(run_id, user.tenant_id)).fetchone()
+    if not r: raise HTTPException(404,"Run not found")
+    return {"id":r["id"],"created_at":r["created_at"],"updated_at":r["updated_at"],"status":r["status"],
+            "request":json.loads(r["request_json"]),"result":json.loads(r["result_json"]) if r["result_json"] else None,
+            "logs":json.loads(r["logs_json"]),"approved":bool(r["approved"]),
+            "retry_count":r["retry_count"] if "retry_count" in r.keys() else 0}
+
+@app.get("/api/runs/{run_id}/stream")
+async def stream_run(run_id: str):
+    with db() as con:
+        r = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Run not found")
+
+    async def event_generator():
+        with db() as con:
+            curr = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        if curr:
+            snapshot = {
+                "event": "snapshot",
+                "status": curr["status"],
+                "logs": json.loads(curr["logs_json"]),
+                "result": json.loads(curr["result_json"]) if curr["result_json"] else None
+            }
+            yield f"data: {json.dumps(snapshot)}\n\n"
+
+        queue = await broadcaster.subscribe(run_id)
+        try:
+            while True:
+                msg = await queue.get()
+                yield f"data: {json.dumps(msg)}\n\n"
+                if msg.get("event") == "status_change":
+                    st = msg.get("data", {}).get("status")
+                    if st in ("approved", "succeeded", "failed", "cancelled", "awaiting_approval", "draft_ready"):
+                        break
+        finally:
+            await broadcaster.unsubscribe(run_id, queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/api/runs/{run_id}/cancel")
+async def cancel_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    success = await task_queue.cancel(run_id)
+    if not success:
+        with db() as con:
+            r = con.execute("SELECT id, status FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
+        if not r:
+            raise HTTPException(404, "Run not found")
+        raise HTTPException(409, f"Cannot cancel run with status '{r['status']}'")
+    audit_logger.log(user.tenant_id, user.user_id, "WORKFLOW_CANCELLED", run_id)
+    return {"id": run_id, "status": "cancelled", "message": "Workflow run cancelled successfully."}
+
+@app.post("/api/runs/{run_id}/retry")
+async def retry_run(run_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    success = await task_queue.retry(run_id)
+    if not success:
+        with db() as con:
+            r = con.execute("SELECT id, status FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
+        if not r:
+            raise HTTPException(404, "Run not found")
+        raise HTTPException(409, f"Cannot retry run with status '{r['status']}'")
+    audit_logger.log(user.tenant_id, user.user_id, "WORKFLOW_RETRIED", run_id)
+    return {"id": run_id, "status": "queued", "message": "Workflow run re-queued for execution."}
+
+@app.post("/api/runs/{run_id}/approve")
+def approve_run(run_id: str, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
+    with db() as con:
+        r=con.execute("SELECT id,status FROM runs WHERE id=? AND tenant_id=?",(run_id, user.tenant_id)).fetchone()
+        if not r: raise HTTPException(404,"Run not found")
+        if r["status"] not in ("awaiting_approval","draft_ready","approved"):
+            raise HTTPException(409,f"Cannot approve run with status {r['status']}")
+        con.execute("UPDATE runs SET approved=1,status='approved',updated_at=? WHERE id=?",(now(),run_id))
+    audit_logger.log(user.tenant_id, user.user_id, "DRAFT_APPROVED", run_id, {"approver": user.email})
+    return {"id":run_id,"status":"approved","message":"Draft approved internally. This does not publish to any platform."}
+
+@app.post("/api/runs/{run_id}/publish")
+async def publish_run(run_id: str, user: AuthenticatedUser = Depends(require_role(["admin", "editor"]))):
+    with db() as con:
+        r = con.execute("SELECT * FROM runs WHERE id=? AND tenant_id=?", (run_id, user.tenant_id)).fetchone()
+    if not r:
+        raise HTTPException(404, "Run not found")
+    if not r["approved"]:
+        raise HTTPException(403, "Cannot publish unapproved draft. Explicit human approval is required.")
+
+    connections = platform_manager.list_connections(user.tenant_id)
+    if not connections:
+        audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_BLOCKED_NO_CONNECTIONS", run_id)
+        raise HTTPException(412, "Publishing blocked: No verified official platform connections are configured for this workspace.")
+
+    result_data = json.loads(r["result_json"]) if r["result_json"] else {}
+    posts = result_data.get("content", [])
+    publish_outcomes = []
+    for post in posts:
+        res = await platform_manager.publish(
+            platform=post["platform"],
+            connection_id=connections[0].connection_id,
+            copy=post["copy"],
+            idempotency_key=f"pub_{run_id}_{post['platform']}"
+        )
+        publish_outcomes.append(res.model_dump())
+
+    audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_EXECUTED", run_id, {"outcomes": publish_outcomes})
+    return {"id": run_id, "status": "published", "outcomes": publish_outcomes}
+
+@app.get("/api/audit")
+def get_audit_trail(user: AuthenticatedUser = Depends(require_role(["admin"]))):
+    with db() as con:
+        rows = con.execute("SELECT * FROM audit_events WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100", (user.tenant_id,)).fetchall()
+    return {"events": [dict(r) for r in rows]}
+
+@app.get("/api/connections")
+def list_connections(user: AuthenticatedUser = Depends(get_current_user)):
+    conns = platform_manager.list_connections(user.tenant_id)
+    return {"connections": [c.model_dump(exclude={"encrypted_access_token", "encrypted_refresh_token"}) for c in conns]}
