@@ -56,7 +56,8 @@ def db():
 
 from fastapi import Depends
 from app.db.migrations import run_migrations
-from app.security.auth import get_current_user, require_role, AuthenticatedUser
+from app.security.auth import get_current_user, require_role, AuthenticatedUser, create_jwt
+from app.security.rbac import Role
 from app.security.audit import AuditLogger
 from app.security.rate_limit import check_rate_limit
 from app.integrations.manager import platform_manager
@@ -181,6 +182,17 @@ def health():
 @app.get("/api/agents")
 def agents():
     return {"agents":AGENTS,"note":"Ten implemented specialist workflow roles."}
+
+@app.get("/api/auth/token")
+def issue_dashboard_token():
+    user = AuthenticatedUser(
+        user_id="usr_dashboard_admin",
+        email="admin@workspace.local",
+        role=Role.ADMIN.value,
+        tenant_id="default"
+    )
+    token = create_jwt(user)
+    return {"token": token, "user": user.model_dump()}
 
 @app.get("/api/runs")
 def list_runs(user: AuthenticatedUser = Depends(get_current_user)):

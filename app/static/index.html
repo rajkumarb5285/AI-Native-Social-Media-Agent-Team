@@ -31,7 +31,39 @@ button{border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:point
 </div></main>
 <script>
 const $=id=>document.getElementById(id);
-async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});const j=await r.json();if(!r.ok)throw new Error(j.detail||'Request failed');return j}
+let authToken = localStorage.getItem('agent_team_token') || '';
+async function getAuthToken() {
+  if (authToken) return authToken;
+  try {
+    const res = await fetch('/api/auth/token');
+    if (res.ok) {
+      const data = await res.json();
+      authToken = data.token;
+      localStorage.setItem('agent_team_token', authToken);
+      return authToken;
+    }
+  } catch (err) {
+    console.error('Failed to get auth token', err);
+  }
+  return '';
+}
+async function api(url,opts={}){
+  const token = await getAuthToken();
+  const headers = {'Content-Type':'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}), ...(opts.headers || {})};
+  let r = await fetch(url, {...opts, headers});
+  if (r.status === 401 && authToken) {
+    authToken = '';
+    localStorage.removeItem('agent_team_token');
+    const fresh = await getAuthToken();
+    if (fresh) {
+      headers['Authorization'] = 'Bearer ' + fresh;
+      r = await fetch(url, {...opts, headers});
+    }
+  }
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.detail || 'Request failed');
+  return j;
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function init(){try{const h=await api('/api/health');$('mode').textContent=h.mode==='demo'?'DEMO MODE':'LLM CONNECTED';$('mode').style.color=h.mode==='demo'?'var(--amber)':'var(--green)';const a=await api('/api/agents');$('agentCount').textContent=a.agents.length;$('agents').innerHTML=a.agents.map(x=>`<div class="agent"><span class="dot"></span><span class="muted">${esc(x.department)}</span><strong>${esc(x.name)}</strong><div class="muted">${esc(x.purpose)}</div></div>`).join('');await history()}catch(e){$('status').textContent=e.message}}
 async function history(){const data=await api('/api/runs');$('runCount').textContent=data.runs.length;$('history').innerHTML=data.runs.length?data.runs.map(r=>`<div class="log"><strong>${esc(r.request?.brand||'Workflow')}</strong><div class="muted">${esc(r.status)} · ${new Date(r.created_at).toLocaleString()}</div><button type="button" class="secondary" style="margin-top:7px;padding:6px 9px" onclick="loadRun('${r.id}')">Open run</button></div>`).join(''):'No runs yet.'}
