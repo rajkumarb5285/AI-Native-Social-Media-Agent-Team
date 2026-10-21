@@ -98,3 +98,27 @@ async def test_llm_provider_initialization():
     )
     assert provider.model == "gpt-4.1-mini"
     assert provider.api_key == "test-key"
+
+def test_persisted_platform_connection(tmp_path, monkeypatch):
+    db_path = tmp_path / "platforms.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    from app.db.migrations import run_migrations
+    run_migrations(str(db_path))
+    manager = PlatformManager(lambda: str(db_path))
+    connection = ConnectionRecord(
+        connection_id="conn_persisted_test",
+        tenant_id="tenant_persisted",
+        platform="linkedin",
+        account_name="Test LinkedIn",
+        encrypted_access_token=encrypt_token("test_token"),
+        is_active=True
+    )
+    manager.save_connection(connection)
+
+    # A fresh manager instance simulates an API restart.
+    fresh_manager = PlatformManager(lambda: str(db_path))
+    restored = fresh_manager.get_connection("conn_persisted_test", tenant_id="tenant_persisted")
+    assert restored is not None
+    assert restored.account_name == "Test LinkedIn"
+    assert decrypt_token(restored.encrypted_access_token) == "test_token"
+    assert fresh_manager.get_connection("conn_persisted_test", tenant_id="other_tenant") is None
