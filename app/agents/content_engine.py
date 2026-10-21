@@ -41,8 +41,9 @@ class ContentEngineAgent(BaseAgent[ContentEngineInput, ContentEngineOutput]):
         goal = input_data.goal.strip()
         voice = input_data.voice_profile.model_dump() if input_data.voice_profile else {}
         facts = [item.strip() for item in input_data.source_facts if item.strip()]
-        if input_data.offer.strip():
-            facts.append(f"Offer supplied by the user: {input_data.offer.strip()}")
+        offer_value = (input_data.offer or "").strip()
+        if offer_value:
+            facts.append(f"Offer supplied by the user: {offer_value}")
 
         if provider is not None:
             system = (
@@ -57,7 +58,7 @@ class ContentEngineAgent(BaseAgent[ContentEngineInput, ContentEngineOutput]):
                 "goal": goal,
                 "audience": input_data.audience,
                 "tone": input_data.tone,
-                "offer": input_data.offer or "",
+                "offer": offer_value,
                 "platform": input_data.platform,
                 "research_summary": input_data.research_summary,
                 "brand_voice": voice,
@@ -117,7 +118,7 @@ class ContentEngineAgent(BaseAgent[ContentEngineInput, ContentEngineOutput]):
             f"showing a concrete example, and explaining the next useful step.\n\n"
             f"Research context (not independently verified): {input_data.research_summary[:500]}"
         )
-        cta = input_data.offer.strip() or f"What would help you achieve this goal with {brand}?"
+        cta = offer_value or f"What would help you achieve this goal with {brand}?"
         return ContentEngineOutput(
             success=True,
             flagship_headline=headline,
