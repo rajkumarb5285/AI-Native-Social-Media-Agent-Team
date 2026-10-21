@@ -120,3 +120,43 @@ def test_audit_trail(client):
     actions = [e["action"] for e in events]
     assert "WORKFLOW_CREATED" in actions
     assert "DRAFT_APPROVED" in actions
+
+def test_queue_actions_and_stream_are_tenant_scoped(client):
+    owner = AuthenticatedUser(
+        user_id="owner_user", email="owner@example.com",
+        role=Role.ADMIN.value, tenant_id="tenant_owner"
+    )
+    other = AuthenticatedUser(
+        user_id="other_user", email="other@example.com",
+        role=Role.ADMIN.value, tenant_id="tenant_other"
+    )
+    owner_headers = {"Authorization": f"Bearer {create_jwt(owner)}"}
+    other_headers = {"Authorization": f"Bearer {create_jwt(other)}"}
+
+    created = client.post(
+        "/api/runs?sync=false",
+        json={"brand": "Owner Brand", "goal": "Owner campaign"},
+        headers=owner_headers,
+    )
+    assert created.status_code == 200
+    run_id = created.json()["id"]
+
+    # A different tenant must not observe or control the owner's queued run.
+    assert client.get(f"/api/runs/{run_id}", headers=other_headers).status_code == 404
+    assert client.get(f"/api/runs/{run_id}/stream", headers=other_headers).status_code == 404
+    assert client.post(f"/api/runs/{run_id}/cancel", headers=other_headers).status_code == 404
+    assert client.post(f"/api/runs/{run_id}/retry", headers=other_headers).status_code == 404
+
+    still_queued = client.get(f"/api/runs/{run_id}", headers=owner_headers)
+    assert still_queued.status_code == 200
+    assert still_queued.json()["status"] == "queued"
+
+    cancelled = client.post(f"/api/runs/{run_id}/cancel", headers=owner_headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+
+    # Retry attempts from another tenant remain forbidden after cancellation too.
+    assert client.post(f"/api/runs/{run_id}/retry", headers=other_headers).status_code == 404
+    owner_view = client.get(f"/api/runs/{run_id}", headers=owner_headers)
+    assert owner_view.json()["status"] == "cancelled"
+
