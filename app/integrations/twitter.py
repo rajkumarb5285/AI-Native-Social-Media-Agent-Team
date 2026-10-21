@@ -4,10 +4,6 @@ import urllib.parse
 import secrets
 import hashlib
 import base64
-import json
-import sqlite3
-import datetime
-from app.db.migrations import run_migrations
 import httpx
 from typing import Optional
 from app.integrations.base import (
@@ -25,8 +21,6 @@ class TwitterAdapter(BaseSocialAdapter):
         self.auth_url = "https://twitter.com/i/oauth2/authorize"
         self.token_url = "https://api.twitter.com/2/oauth2/token"
         self.api_base = "https://api.twitter.com/2"
-        # OAuth PKCE values must be generated per attempt and stored server-side.
-        self._pending_pkce: dict[str, str] = {}
 
     def connect_url(self, tenant_id: str, scopes: list[str], redirect_uri: str, state: str, pkce_verifier: Optional[str] = None) -> str:
         verifier = pkce_verifier or secrets.token_urlsafe(64)[:96]
