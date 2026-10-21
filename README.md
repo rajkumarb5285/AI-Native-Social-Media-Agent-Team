@@ -5,15 +5,19 @@ A buildable starter for a multi-agent social media operations platform inspired 
 ## What is included
 - FastAPI backend and responsive dashboard
 - Persistent SQLite run history
-- Six cooperating workflow roles: Orchestrator, MarketRadar, Content Engine, Repurposing, Quality Gate, Analytics Planner
+- Ten specialist workflow roles covering orchestration, research, brand memory, content generation, repurposing, quality review, approval, publishing, analytics planning, and reporting
 - OpenAI-compatible model API integration (optional; configured by environment variables)
 - Honest demo mode when no model key is configured
 - Run states, logs, approval status, health endpoint
 - Dockerfile and Docker Compose
 - Antigravity build brief, architecture, test checklist, and deployment guide
 
-## Important production boundary
-This starter can generate plans and content drafts. It does **not** pretend to publish posts, read live social metrics, or connect to social accounts without platform-specific OAuth/API credentials and adapters. Real publishing must be implemented and tested against the official API for each platform. Do not scrape sites or automate account actions in ways that violate platform terms. Keep human approval enabled until the integration has been tested.
+## Social integration status and production boundary
+The repository includes OAuth 2.0 connection flows and official-API text-post adapters for LinkedIn and X. Publishing requires the corresponding developer app credentials, a publicly reachable callback URL, an encryption key, valid account authorization, and explicit human approval of the workflow. The app refuses to silently drop media: image/video publishing is not implemented and requests containing media fail clearly.
+
+Publishing uses a persistent, tenant-scoped idempotency ledger. A key that has already been attempted is not automatically sent again, including when the process stops during an uncertain platform response. Reconcile the platform account before manually retrying with a new key. Token refresh is attempted near expiry when a refresh token is available. These safeguards reduce duplicate risk, but do not make the external platform APIs transactional.
+
+The automated test suite uses test data and mocks; it does **not** prove your LinkedIn or X developer credentials, callback registration, scopes, account permissions, or live publishing are valid. Run the readiness check and complete a real test-account OAuth and text-post test before enabling customer work. Do not scrape sites or automate account actions in ways that violate platform terms. Keep human approval enabled.
 
 ## Run locally
 Requires Python 3.11+.
@@ -41,6 +45,7 @@ Open http://localhost:8000
 ## API
 - `GET /api/health` — health and mode
 - `GET /api/agents` — available workflow roles
+- `GET /api/integrations/readiness` — admin-only configuration checks; reports booleans, never secret values
 - `GET /api/runs` — recent persisted runs
 - `POST /api/runs` — run a content workflow
 - `GET /api/runs/{run_id}` — retrieve run result/logs
@@ -57,8 +62,8 @@ curl -X POST http://localhost:8000/api/runs \
 1. Replace local SQLite with managed PostgreSQL.
 2. Add user authentication, tenant isolation, role-based access, CSRF protection where relevant, rate limits, and audit trails.
 3. Add a durable queue/worker (Celery/RQ/Temporal or equivalent) for long-running jobs.
-4. Implement platform-specific OAuth and official API adapters; store tokens in a secret manager and encrypt at rest.
-5. Add idempotency, retries with backoff, token refresh, quotas, webhook verification, and duplicate-post prevention.
+4. Configure and live-test the LinkedIn/X OAuth adapters against official developer apps; move production secrets to a secret manager and keep tokens encrypted at rest.
+5. Validate the persistent idempotency ledger and token refresh against real test accounts; add rate-limit-aware retries, quotas, webhook verification, and operator reconciliation.
 6. Add monitoring, structured logs, alerts, backups, data deletion/export, privacy policy, terms, and incident response.
 7. Run security scans, dependency updates, load tests, and provider/platform policy reviews.
 8. Keep approval gates for publishing, paid promotion, messaging, deletion, and any spend-bearing action.
