@@ -1,15 +1,23 @@
+"""Draft-only publishing gate.
+
+Actual platform writes are delegated to the authenticated application service.
+This agent must never claim that an external post exists unless an adapter has
+returned a real external post identifier.
+"""
 from typing import Optional
 from pydantic import Field
 from app.agents.base import BaseAgent, AgentInput, AgentOutput, current_time_iso
 from app.agents.repurposing import PlatformPost
 
+
 class PublishItemResult(AgentInput):
     platform: str
-    status: str # "published" | "draft_retained" | "blocked" | "failed"
+    status: str
     external_post_id: Optional[str] = None
     idempotency_key: str
     timestamp: str = Field(default_factory=current_time_iso)
     details: str
+
 
 class PublishingInput(AgentInput):
     posts: list[PlatformPost]
@@ -18,68 +26,54 @@ class PublishingInput(AgentInput):
     connected_adapters: dict[str, bool] = Field(default_factory=dict)
     live_publish_requested: bool = False
 
+
 class PublishingOutput(AgentOutput):
     results: list[PublishItemResult] = Field(default_factory=list)
     all_published: bool = False
     draft_only_mode: bool = True
     audit_summary: str
 
+
 class PublishingAgent(BaseAgent[PublishingInput, PublishingOutput]):
     agent_id = "publishing"
     name = "Publishing Agent"
     department = "Operations"
-    description = "Dispatches approved drafts to official social APIs with strict idempotency and connection checks."
+    description = "Prepares draft status; real writes happen only through the verified application publisher."
 
     async def execute(self, input_data: PublishingInput) -> PublishingOutput:
+        import hashlib
         results = []
-        import uuid
-
         if not input_data.is_approved:
-            for p in input_data.posts:
+            for post in input_data.posts:
+                key = hashlib.sha256(
+                    f"{input_data.tenant_id}:{post.platform}:{post.copy}".encode("utf-8")
+                ).hexdigest()
                 results.append(PublishItemResult(
-                    platform=p.platform,
+                    platform=post.platform,
                     status="blocked",
-                    idempotency_key=f"idemp-{uuid.uuid4().hex[:10]}",
-                    details="External publish blocked: human approval not granted."
+                    idempotency_key=key,
+                    details="Publishing blocked: human approval has not been granted."
                 ))
             return PublishingOutput(
-                success=False,
-                errors=["Approval required before publishing."],
-                results=results,
-                all_published=False,
-                draft_only_mode=True,
-                audit_summary="Blocked by Approval Gate."
+                success=False, errors=["Approval required before publishing."],
+                results=results, all_published=False, draft_only_mode=True,
+                audit_summary="Blocked by approval gate."
             )
 
-        # Approved: Check connected official adapters
-        all_live = True
-        for p in input_data.posts:
-            has_adapter = input_data.connected_adapters.get(p.platform.lower(), False)
-            idemp_key = f"pub-{input_data.tenant_id}-{p.platform.lower()}-{uuid.uuid4().hex[:8]}"
-
-            if has_adapter and input_data.live_publish_requested:
-                # Live adapter publishing
-                results.append(PublishItemResult(
-                    platform=p.platform,
-                    status="published",
-                    external_post_id=f"ext_{uuid.uuid4().hex[:12]}",
-                    idempotency_key=idemp_key,
-                    details=f"Dispatched to official {p.platform} API with verified credentials."
-                ))
-            else:
-                all_live = False
-                results.append(PublishItemResult(
-                    platform=p.platform,
-                    status="draft_retained",
-                    external_post_id=None,
-                    idempotency_key=idemp_key,
-                    details=f"Draft approved and held in internal storage. {p.platform} API is not currently connected."
-                ))
-
+        for post in input_data.posts:
+            key = hashlib.sha256(
+                f"{input_data.tenant_id}:{post.platform}:{post.copy}".encode("utf-8")
+            ).hexdigest()
+            results.append(PublishItemResult(
+                platform=post.platform,
+                status="draft_retained",
+                idempotency_key=key,
+                details=(
+                    "Draft is approved internally. No external publishing is performed by this graph stage; "
+                    "use the authenticated publish service to dispatch and verify the platform response."
+                )
+            ))
         return PublishingOutput(
-            success=True,
-            results=results,
-            all_published=all_live and len(results) > 0,
-            draft_only_mode=not all_live,
-            audit_summary="Processed publishing stage with honesty boundary preserved."
+            success=True, results=results, all_published=False, draft_only_mode=True,
+            audit_summary="Draft status recorded. External publication has not been attempted."
         )
