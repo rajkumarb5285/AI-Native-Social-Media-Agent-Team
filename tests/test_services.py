@@ -46,7 +46,10 @@ def test_twitter_adapter_connect_url():
 
 @pytest.mark.asyncio
 async def test_platform_manager_publish_and_idempotency():
-    mgr = PlatformManager()
+    import tempfile
+    from pathlib import Path
+    test_db = str(Path(tempfile.mkdtemp()) / "publish-test.db")
+    mgr = PlatformManager(lambda: test_db)
     conn = ConnectionRecord(
         connection_id="conn_li_test",
         tenant_id="tenant_abc",
@@ -64,7 +67,8 @@ async def test_platform_manager_publish_and_idempotency():
         platform="linkedin",
         connection_id="conn_li_test",
         copy="Exciting announcement from Acme!",
-        idempotency_key="idemp_key_101"
+        idempotency_key="idemp_key_101",
+        tenant_id="tenant_abc"
     )
     # Since mock_token won't reach real LinkedIn without net, it handles network failure gracefully
     assert res.platform == "linkedin"
@@ -75,7 +79,8 @@ async def test_platform_manager_publish_and_idempotency():
         platform="linkedin",
         connection_id="nonexistent_conn",
         copy="Test",
-        idempotency_key="idemp_key_102"
+        idempotency_key="idemp_key_102",
+        tenant_id="tenant_abc"
     )
     assert fail_res.success is False
     assert "not found" in fail_res.error_message
@@ -146,3 +151,99 @@ def test_twitter_pkce_uses_supplied_verifier_without_process_state():
     expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
     assert params["code_challenge"] == [expected]
     assert params["code_challenge_method"] == ["S256"]
+
+@pytest.mark.asyncio
+async def test_platform_manager_does_not_send_same_idempotency_key_twice(tmp_path):
+    from app.integrations.base import PlatformPublishResult
+
+    class FakeAdapter:
+        platform_name = "linkedin"
+
+        def __init__(self):
+            self.calls = 0
+
+        async def publish_draft(self, connection, copy, media_urls, idempotency_key):
+            self.calls += 1
+            return PlatformPublishResult(
+                success=True, platform="linkedin", external_post_id="post-123",
+                idempotency_key=idempotency_key
+            )
+
+    manager = PlatformManager(lambda: str(tmp_path / "idempotency.db"))
+    fake = FakeAdapter()
+    manager._adapters["linkedin"] = fake
+    manager.save_connection(ConnectionRecord(
+        connection_id="conn_idempotent",
+        tenant_id="tenant_idempotent",
+        platform="linkedin",
+        account_name="Test account",
+        encrypted_access_token=encrypt_token("access"),
+        is_active=True,
+    ))
+
+    first = await manager.publish(
+        platform="linkedin", connection_id="conn_idempotent",
+        copy="Test post", idempotency_key="run-123-linkedin",
+        tenant_id="tenant_idempotent"
+    )
+    second = await manager.publish(
+        platform="linkedin", connection_id="conn_idempotent",
+        copy="Test post", idempotency_key="run-123-linkedin",
+        tenant_id="tenant_idempotent"
+    )
+
+    assert first.success is True
+    assert second.success is True
+    assert second.external_post_id == "post-123"
+    assert fake.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_platform_manager_refuses_unscoped_connection_lookup(tmp_path):
+    manager = PlatformManager(lambda: str(tmp_path / "tenant.db"))
+    manager.save_connection(ConnectionRecord(
+        connection_id="tenant-bound-connection",
+        tenant_id="tenant-one",
+        platform="linkedin",
+        account_name="Private account",
+        encrypted_access_token=encrypt_token("access"),
+    ))
+    assert manager.get_connection("tenant-bound-connection") is None
+    assert manager.get_connection("tenant-bound-connection", tenant_id="tenant-two") is None
+    assert manager.get_connection("tenant-bound-connection", tenant_id="tenant-one") is not None
+
+
+@pytest.mark.asyncio
+async def test_platform_manager_refreshes_expiring_credentials(tmp_path):
+    import datetime
+
+    class RefreshingAdapter:
+        platform_name = "linkedin"
+
+        async def refresh_credentials(self, connection):
+            connection.encrypted_access_token = encrypt_token("refreshed-access")
+            connection.expires_at = (
+                datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+            ).isoformat()
+            connection.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            return connection
+
+    manager = PlatformManager(lambda: str(tmp_path / "refresh.db"))
+    adapter = RefreshingAdapter()
+    connection = ConnectionRecord(
+        connection_id="expiring-connection",
+        tenant_id="tenant-refresh",
+        platform="linkedin",
+        account_name="Refresh account",
+        encrypted_access_token=encrypt_token("old-access"),
+        encrypted_refresh_token=encrypt_token("refresh-token"),
+        expires_at=(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=10)).isoformat(),
+    )
+    manager.save_connection(connection)
+    error = await manager._refresh_if_needed(adapter, connection)
+    assert error is None
+    saved = manager.get_connection("expiring-connection", tenant_id="tenant-refresh")
+    assert saved is not None
+    assert decrypt_token(saved.encrypted_access_token) == "refreshed-access"
+    assert manager._expiry(saved) > datetime.datetime.now(datetime.timezone.utc)
+
