@@ -4,6 +4,7 @@ from app.services.llm.base import BaseLLMProvider
 from app.services.llm.openai_provider import OpenAICompatibleProvider
 
 def get_llm_provider() -> Optional[BaseLLMProvider]:
+    # Re-read configuration so runtime-loaded secrets or test overrides are honored.
     api_key = os.getenv("LLM_API_KEY", "").strip()
     if not api_key:
         return None
