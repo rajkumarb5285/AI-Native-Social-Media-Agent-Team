@@ -108,7 +108,8 @@ class PlatformManager:
             return PlatformPublishResult(success=False, platform=platform,
                 idempotency_key=idempotency_key, error_message=f"No supported official adapter for platform '{platform}'.")
         conn = self.get_connection(connection_id, tenant_id=tenant_id)
-        if not conn or not conn.is_active or conn.platform.lower() not in {platform.lower(), ("twitter" if platform.lower()=="x" else platform.lower())}:
+        expected_platform = "twitter" if platform.lower() == "x" else platform.lower()
+        if not conn or not conn.is_active or conn.platform.lower() != expected_platform:
             return PlatformPublishResult(success=False, platform=platform,
                 idempotency_key=idempotency_key, error_message="Active connection for this tenant and platform not found.")
         return await adapter.publish_draft(connection=conn, copy=copy, media_urls=media_urls or [], idempotency_key=idempotency_key)
