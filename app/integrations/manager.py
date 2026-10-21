@@ -62,7 +62,7 @@ class PlatformManager:
         self.save_connection(connection)
 
     def get_connection(self, connection_id: str, tenant_id: Optional[str] = None) -> Optional[ConnectionRecord]:
-        """Read one connection from durable storage, scoped to a tenant when supplied."""
+        """Read one connection from persistent storage, scoped to tenant when supplied."""
         with self._db() as con:
             if tenant_id is None:
                 row = con.execute("SELECT * FROM connections WHERE id=?", (connection_id,)).fetchone()
@@ -79,12 +79,9 @@ class PlatformManager:
         )
 
     def list_connections(self, tenant_id: str = "default") -> list[ConnectionRecord]:
-        """Read active connections belonging to one tenant."""
+        """Read active connections belonging to a single tenant."""
         with self._db() as con:
-            rows = con.execute(
-                "SELECT * FROM connections WHERE tenant_id=? AND is_active=1 ORDER BY created_at DESC",
-                (tenant_id,)
-            ).fetchall()
+            rows = con.execute("SELECT * FROM connections WHERE tenant_id=? AND is_active=1 ORDER BY created_at DESC", (tenant_id,)).fetchall()
         return [ConnectionRecord(
             connection_id=row["id"], tenant_id=row["tenant_id"], platform=row["platform"],
             account_name=row["account_name"], encrypted_access_token=row["encrypted_access_token"],
