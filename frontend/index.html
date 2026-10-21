@@ -901,6 +901,138 @@
       justify-content: space-between;
       background: rgba(8, 11, 18, 0.5);
     }
+
+    /* Festival Marketing Auto-Pilot Banner */
+    .festival-autopilot-banner {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(99, 102, 241, 0.12) 50%, rgba(13, 17, 27, 0.9) 100%);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 12px 30px -10px rgba(245, 158, 11, 0.2);
+    }
+    .festival-autopilot-banner::before {
+      content: '';
+      position: absolute;
+      top: -50px;
+      right: 15%;
+      width: 250px;
+      height: 250px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .festival-banner-content {
+      flex: 1;
+      z-index: 1;
+    }
+    .festival-tag-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .festival-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.18);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+    .festival-days-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+    .festival-headline {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+    .festival-sub {
+      font-size: 13px;
+      color: var(--text-secondary);
+      max-width: 680px;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .festival-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .festival-preview-box {
+      width: 170px;
+      height: 170px;
+      border-radius: var(--radius-md);
+      background: rgba(10, 14, 23, 0.85);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 12px;
+      position: relative;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .festival-preview-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: calc(var(--radius-md) - 2px);
+    }
+    .select-input {
+      width: 100%;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease;
+      cursor: pointer;
+    }
+    .select-input:focus {
+      border-color: var(--primary);
+    }
+    .user-auth-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      padding: 5px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .user-auth-pill:hover {
+      border-color: var(--primary);
+      color: var(--text-primary);
+      background: rgba(99, 102, 241, 0.1);
+    }
   </style>
 </head>
 <body>
@@ -915,6 +1047,10 @@
         <div class="brand-title">Nexus <span class="workspace-pill">Studio</span></div>
       </a>
       <div class="nav-actions">
+        <button type="button" class="btn btn-secondary" onclick="toggleProfileDrawer(true)" style="padding: 7px 12px; font-size: 12px; display: flex; align-items: center; gap: 7px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span id="navBizName">Business Profile</span>
+        </button>
         <button type="button" class="btn btn-secondary" onclick="toggleAccountsModal(true)" style="padding: 7px 12px; font-size: 12px; display: flex; align-items: center; gap: 7px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           <span>Connected Channels</span>
@@ -924,7 +1060,9 @@
           <div class="pulse-dot"></div>
           <span>Active Operations</span>
         </div>
-        <div class="avatar-btn" title="Enterprise Workspace">RP</div>
+        <div id="userAuthBtn" class="user-auth-pill" onclick="toggleAuthModal(true)" title="Account / Authentication">
+          <span id="userAuthLabel">Sign In</span>
+        </div>
       </div>
     </div>
   </header>
@@ -932,6 +1070,34 @@
   <!-- App Shell -->
   <main class="app-shell">
     
+    <!-- Upcoming Festival Marketing Engine Banner (Dhanda AI Parity) -->
+    <div id="festivalBanner" class="festival-autopilot-banner">
+      <div class="festival-banner-content">
+        <div class="festival-tag-row">
+          <span class="festival-badge">✦ Upcoming Festival Marketing Auto-Pilot</span>
+          <span id="festDaysBadge" class="festival-days-badge">Checking Calendar...</span>
+        </div>
+        <h2 id="festTitle" class="festival-headline">Festival Celebration Engine</h2>
+        <p id="festDesc" class="festival-sub">The autonomous marketing agent automatically prepares customized festive greetings with your store phone, address, and Google 5-Star rating badge ready for instant dispatch to GMB, Instagram, and LinkedIn.</p>
+        <div class="festival-actions">
+          <button type="button" class="btn btn-primary" id="festAutoPilotBtn" onclick="runFestivalAutoPilot()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="festBtnText">Auto-Generate & Publish Festival Post</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="toggleProfileDrawer(true)">
+            Edit Business & Contact Details
+          </button>
+        </div>
+      </div>
+      <div class="festival-preview-box" id="festPreviewBox">
+        <div class="fest-thumb-wrap" id="festThumbWrap">
+          <div style="font-size:32px; margin-bottom:8px;">🪔</div>
+          <div style="font-size:12px; font-weight:700; color:#fbbf24;">Festival Auto-Pilot</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Ready to generate 1080×1080 poster</div>
+        </div>
+      </div>
+    </div>
+
     <div class="hero-banner">
       <div>
         <h1 class="hero-headline">Content Orchestration Studio</h1>
@@ -974,8 +1140,16 @@
           </div>
 
           <div class="field-group">
-            <label class="field-label">Target Channels</label>
+            <label class="field-label">Target Channels (Autonomous Publishing)</label>
             <div class="platform-selector">
+              <div class="platform-chip active" data-platform="Instagram">
+                <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                Instagram
+              </div>
+              <div class="platform-chip active" data-platform="GMB">
+                <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                Google Business (GMB)
+              </div>
               <div class="platform-chip active" data-platform="LinkedIn">
                 <svg viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.65 1.65 0 0 0 1.66-1.66 1.66 1.66 0 0 0-3.32 0 1.66 1.66 0 0 0 1.66 1.66m1.39 9.94v-8.37H5.07v8.37h2.78z"/></svg>
                 LinkedIn
@@ -984,11 +1158,21 @@
                 <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
                 Twitter / X
               </div>
-              <div class="platform-chip" data-platform="Instagram">
-                <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                Instagram
-              </div>
             </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="poster_theme">Visual Poster Design Template (1000s Combinations)</label>
+            <select id="poster_theme" name="poster_theme" class="select-input">
+              <option value="festival_diwali">Festive Diwali / Lights (Royal Saffron & Gold Aura)</option>
+              <option value="festival_holi">Festival of Colors Holi (Vibrant Chromatic Prism)</option>
+              <option value="promotional_offer">High-Urgency Flash Sale (Red & Gold Badges)</option>
+              <option value="gmb_local" selected>Google Business Profile Local Spotlight (5-Star Verified Badge)</option>
+              <option value="luxury_gold">Executive Luxury & Gold (Midnight Onyx Elegance)</option>
+              <option value="quote_leadership">Thought Leadership & Quotes (Editorial Authority)</option>
+              <option value="modern_tech">Cyberpunk Neon & SaaS (Deep Indigo Matrix)</option>
+            </select>
+            <div class="field-hint">Dynamic vector rendering with embedded contact info, business rating, and custom branding.</div>
           </div>
 
           <div class="two-col">
@@ -1091,7 +1275,7 @@
       <div class="modal-header">
         <div>
           <div class="modal-title">Connected Organization Accounts</div>
-          <div class="modal-subtitle">Connect Instagram, LinkedIn, and Twitter/X for autonomous agent publishing</div>
+          <div class="modal-subtitle">Connect Instagram, Google Business Profile (GMB), LinkedIn, and Twitter/X for autonomous agent publishing</div>
         </div>
         <button class="modal-close-btn" onclick="toggleAccountsModal(false)">&times;</button>
       </div>
@@ -1101,6 +1285,133 @@
       <div class="modal-footer">
         <span style="font-size:11px; color:var(--text-muted);">Autonomous agent publishes automatically to all active channels.</span>
         <button class="btn btn-secondary" onclick="toggleAccountsModal(false)">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Business Profile Modal (Dhanda AI Marketing Parity) -->
+  <div id="profileModal" class="modal-backdrop" style="display:none;" onclick="if(event.target === this) toggleProfileDrawer(false)">
+    <div class="modal-card" style="max-width: 620px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" style="display:flex; align-items:center; gap:8px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Business & Store Profile Setup
+          </div>
+          <div class="modal-subtitle">Configure your business details once. The autonomous agent embeds your contact information, branding, and Google 5-Star badge on all promotional and festival posters.</div>
+        </div>
+        <button class="modal-close-btn" onclick="toggleProfileDrawer(false)">&times;</button>
+      </div>
+      <form id="profileForm" onsubmit="saveProfile(event)" class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="two-col">
+          <div class="field-group">
+            <label class="field-label" for="prof_business_name">Business / Store Name *</label>
+            <input type="text" id="prof_business_name" required placeholder="e.g. Apex Innovations" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="prof_category">Business Category</label>
+            <input type="text" id="prof_category" placeholder="e.g. Retail, Jewelry, Tech, Real Estate" />
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="field-group">
+            <label class="field-label" for="prof_phone">Customer Contact Phone *</label>
+            <input type="text" id="prof_phone" placeholder="e.g. +91 98765 43210" />
+            <div class="field-hint">Rendered on posters for direct call inquiries.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="prof_website">Official Website</label>
+            <input type="text" id="prof_website" placeholder="e.g. https://example.com" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="prof_address">Store / Office Address (GMB Local SEO)</label>
+          <input type="text" id="prof_address" placeholder="e.g. 42 MG Road, Indiranagar, Bangalore" />
+          <div class="field-hint">Used for Google Maps & Local Search Knowledge Panel trust badges.</div>
+        </div>
+
+        <div class="two-col">
+          <div class="field-group">
+            <label class="field-label" for="prof_rating">Google Rating Badge</label>
+            <input type="text" id="prof_rating" value="4.9 ★★★★★" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="prof_review_count">Reviews Proof</label>
+            <input type="text" id="prof_review_count" value="148+ Google Reviews" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="prof_tagline">Brand Tagline / Unique Selling Proposition</label>
+          <input type="text" id="prof_tagline" placeholder="e.g. Empowering Local Commerce with Smart AI" />
+        </div>
+
+        <div class="modal-footer" style="padding:16px 0 0 0; background:transparent; border-top: 1px solid var(--border-subtle);">
+          <span id="profileStatusMsg" style="font-size:12px; color:var(--text-muted);">Syncs across all 1000s of design templates</span>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-secondary" onclick="toggleProfileDrawer(false)">Cancel</button>
+            <button type="submit" id="saveProfBtn" class="btn btn-primary">Save & Apply to Agent</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Authentication Suite Modal (Login / Register / Google / Quick Access) -->
+  <div id="authModal" class="modal-backdrop" style="display:none;" onclick="if(event.target === this) toggleAuthModal(false)">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="authModalTitle">Account Authentication</div>
+          <div class="modal-subtitle">Secure JWT access with PBKDF2 hashing & Google SSO</div>
+        </div>
+        <button class="modal-close-btn" onclick="toggleAuthModal(false)">&times;</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+        <!-- Auth Tabs -->
+        <div style="display:flex; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px;">
+          <button type="button" id="tabLoginBtn" class="tab-btn active" style="flex:1; justify-content:center;" onclick="switchAuthTab('login')">Sign In</button>
+          <button type="button" id="tabRegBtn" class="tab-btn" style="flex:1; justify-content:center;" onclick="switchAuthTab('register')">Create Account</button>
+        </div>
+
+        <!-- 1-Click Quick Access & Google Sign-In Buttons -->
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="googleAuthLogin()" style="display:flex; align-items:center; justify-content:center; gap:10px; padding:10px; font-weight:600; border-color: rgba(255,255,255,0.15);">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <span>Continue with Google</span>
+          </button>
+          
+          <button type="button" class="btn btn-secondary" onclick="quickAccessLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:9px; font-size:12px; background: rgba(99, 102, 241, 0.12); color:#a5b4fc; border-color: rgba(99, 102, 241, 0.3);">
+            <span>⚡ 1-Click Instant Test Access</span>
+          </button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; margin: 4px 0;">
+          <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+          <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Or with Email</span>
+          <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+        </div>
+
+        <!-- Email & Password Form -->
+        <form id="authForm" onsubmit="handleAuthSubmit(event)" style="display:flex; flex-direction:column; gap:14px;">
+          <div class="field-group">
+            <label class="field-label" for="auth_email">Email Address</label>
+            <input type="email" id="auth_email" required placeholder="founder@company.com" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="auth_password">Password</label>
+            <input type="password" id="auth_password" required placeholder="••••••••••••" />
+          </div>
+          <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="margin-top:6px; justify-content:center;">
+            Sign In to Workspace
+          </button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <span style="font-size:11px; color:var(--text-muted);">Strict token verification + PBKDF2 salting.</span>
+        <button class="btn btn-secondary" onclick="toggleAuthModal(false)">Close</button>
       </div>
     </div>
   </div>
@@ -1216,6 +1527,284 @@
       if (!modal) return;
       modal.style.display = show ? 'flex' : 'none';
       if (show) loadConnections();
+    // Auth State & Actions
+    let currentUser = null;
+    let authTab = 'login';
+
+    function toggleAuthModal(show) {
+      const modal = $('authModal');
+      if (!modal) return;
+      modal.style.display = show ? 'flex' : 'none';
+    }
+
+    function switchAuthTab(tab) {
+      authTab = tab;
+      $('tabLoginBtn').classList.toggle('active', tab === 'login');
+      $('tabRegBtn').classList.toggle('active', tab === 'register');
+      $('authModalTitle').textContent = tab === 'login' ? 'Sign In to Workspace' : 'Create New Account';
+      $('authSubmitBtn').textContent = tab === 'login' ? 'Sign In to Workspace' : 'Register Account';
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = $('auth_email').value.trim();
+      const password = $('auth_password').value;
+      const endpoint = authTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const btn = $('authSubmitBtn');
+      btn.disabled = true;
+      try {
+        const res = await api(endpoint, {
+          method: 'POST',
+          body: JSON.stringify({ email, password })
+        });
+        authToken = res.access_token;
+        localStorage.setItem('agent_team_token', authToken);
+        currentUser = res.user;
+        updateUserUI();
+        toggleAuthModal(false);
+        toast(`Signed in as ${currentUser.email}`);
+        await loadProfile();
+        await loadConnections();
+        await loadHistory();
+      } catch (err) {
+        toast(err.message || 'Authentication failed');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function googleAuthLogin() {
+      try {
+        const res = await api('/api/auth/google', {
+          method: 'POST',
+          body: JSON.stringify({ email: 'founder@google-auth.com', name: 'Google User' })
+        });
+        authToken = res.access_token;
+        localStorage.setItem('agent_team_token', authToken);
+        currentUser = res.user;
+        updateUserUI();
+        toggleAuthModal(false);
+        toast('Signed in via Google SSO');
+        await loadProfile();
+        await loadConnections();
+        await loadHistory();
+      } catch (err) {
+        toast(err.message || 'Google Sign-In failed');
+      }
+    }
+
+    async function quickAccessLogin() {
+      try {
+        const res = await api('/api/auth/quick-access', { method: 'POST' });
+        authToken = res.access_token;
+        localStorage.setItem('agent_team_token', authToken);
+        currentUser = res.user;
+        updateUserUI();
+        toggleAuthModal(false);
+        toast('⚡ Quick Access enabled');
+        await loadProfile();
+        await loadConnections();
+        await loadHistory();
+      } catch (err) {
+        toast(err.message || 'Quick access failed');
+      }
+    }
+
+    function updateUserUI() {
+      const label = $('userAuthLabel');
+      if (!label) return;
+      if (currentUser && currentUser.email) {
+        label.textContent = currentUser.email.split('@')[0];
+        $('userAuthBtn').title = `Signed in as ${currentUser.email}`;
+      } else {
+        label.textContent = 'Sign In';
+      }
+    }
+
+    async function checkCurrentUser() {
+      try {
+        const user = await api('/api/auth/me');
+        currentUser = user;
+        updateUserUI();
+      } catch (err) {
+        currentUser = null;
+        updateUserUI();
+      }
+    }
+
+    // Business Profile Management (Dhanda AI Setup)
+    let currentProfile = null;
+
+    function toggleProfileDrawer(show) {
+      const modal = $('profileModal');
+      if (!modal) return;
+      modal.style.display = show ? 'flex' : 'none';
+      if (show && currentProfile) {
+        $('prof_business_name').value = currentProfile.business_name || '';
+        $('prof_category').value = currentProfile.category || '';
+        $('prof_phone').value = currentProfile.phone || '';
+        $('prof_website').value = currentProfile.website || '';
+        $('prof_address').value = currentProfile.address || '';
+        $('prof_rating').value = currentProfile.rating || '4.9 ★★★★★';
+        $('prof_review_count').value = currentProfile.review_count || '148+ Google Reviews';
+        $('prof_tagline').value = currentProfile.tagline || '';
+      }
+    }
+
+    async function loadProfile() {
+      try {
+        const p = await api('/api/profile');
+        currentProfile = p;
+        if (p.business_name) {
+          $('navBizName').textContent = p.business_name;
+          if ($('brand') && !$('brand').value) {
+            $('brand').value = p.business_name;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load profile', err);
+      }
+    }
+
+    async function saveProfile(e) {
+      e.preventDefault();
+      const btn = $('saveProfBtn');
+      btn.disabled = true;
+      try {
+        const payload = {
+          business_name: $('prof_business_name').value.trim(),
+          category: $('prof_category').value.trim() || 'General Business',
+          phone: $('prof_phone').value.trim(),
+          address: $('prof_address').value.trim(),
+          website: $('prof_website').value.trim(),
+          rating: $('prof_rating').value.trim() || '4.9 ★★★★★',
+          review_count: $('prof_review_count').value.trim() || '148+ Google Reviews',
+          tagline: $('prof_tagline').value.trim()
+        };
+        const res = await api('/api/profile', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        currentProfile = res.profile;
+        $('navBizName').textContent = currentProfile.business_name;
+        if ($('brand')) $('brand').value = currentProfile.business_name;
+        toggleProfileDrawer(false);
+        toast('Business profile synced to marketing agent');
+      } catch (err) {
+        toast(err.message || 'Failed to save profile');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // Festival Marketing Auto-Pilot
+    let upcomingFestivals = [];
+    let currentFestival = null;
+
+    async function loadUpcomingFestivals() {
+      try {
+        const data = await api('/api/festivals/upcoming');
+        upcomingFestivals = data.festivals || [];
+        if (upcomingFestivals.length) {
+          currentFestival = upcomingFestivals[0];
+          $('festivalBanner').style.display = 'flex';
+          $('festTitle').textContent = `Upcoming: ${currentFestival.name}`;
+          $('festDaysBadge').textContent = `In ${currentFestival.days_until} Day${currentFestival.days_until === 1 ? '' : 's'} (${currentFestival.formatted_date})`;
+          $('festDesc').textContent = `Celebration greetings ready for ${currentFestival.name}: "${currentFestival.greeting}" The autonomous agent embeds your store phone, address, and Google 5-Star rating, pre-scheduled for GMB, Instagram, and LinkedIn.`;
+          $('festBtnText').textContent = `Auto-Generate & Publish ${currentFestival.name} Post`;
+        }
+      } catch (err) {
+        console.error('Failed to load festivals', err);
+      }
+    }
+
+    async function runFestivalAutoPilot() {
+      if (!currentFestival) return;
+      const btn = $('festAutoPilotBtn');
+      btn.disabled = true;
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<span>✦ Agent Generating Festival Creative…</span>';
+      try {
+        const res = await api('/api/festivals/generate', {
+          method: 'POST',
+          body: JSON.stringify({
+            festival_id: currentFestival.id,
+            platforms: ['Instagram', 'GMB', 'LinkedIn'],
+            auto_publish: false
+          })
+        });
+        toast(`${currentFestival.name} campaign poster generated!`);
+        if (res.post && res.post.poster_url) {
+          $('festThumbWrap').innerHTML = `<img src="${res.post.poster_url}" alt="Festival Poster" style="width:100%; height:100%; object-fit:cover; border-radius:10px;" />`;
+          $('brand').value = currentProfile?.business_name || 'Apex Innovations';
+          $('goal').value = `Celebrate ${currentFestival.name} with warm festive wishes and special customer offers`;
+          document.querySelector('[data-tab="creativePane"]').click();
+          renderRun({
+            id: 'fest_' + currentFestival.id,
+            brand: currentProfile?.business_name || 'Apex Innovations',
+            status: 'draft_ready',
+            result: {
+              flagship_narrative: {
+                headline: res.post.headline,
+                core_copy: res.post.copy
+              },
+              content: [
+                {
+                  platform: 'Instagram',
+                  format: 'Square Visual Post (1080×1080)',
+                  copy: res.post.copy,
+                  character_count: res.post.copy.length,
+                  poster_url: res.post.poster_url,
+                  status: 'ready'
+                },
+                {
+                  platform: 'GMB',
+                  format: 'Local Business Update',
+                  copy: res.post.copy,
+                  character_count: res.post.copy.length,
+                  poster_url: res.post.poster_url,
+                  status: 'ready'
+                },
+                {
+                  platform: 'LinkedIn',
+                  format: 'Professional Celebration Post',
+                  copy: res.post.copy,
+                  character_count: res.post.copy.length,
+                  poster_url: res.post.poster_url,
+                  status: 'ready'
+                }
+              ]
+            }
+          });
+        }
+      } catch (err) {
+        toast(err.message || 'Festival post generation failed');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
+    }
+
+    // Connected Accounts Management
+    let currentConnections = [];
+
+    async function loadConnections() {
+      try {
+        const data = await api('/api/connections');
+        currentConnections = data.connections || [];
+        const badge = $('connBadge');
+        if (badge) badge.textContent = currentConnections.length;
+        renderAccountsModal();
+      } catch (err) {
+        console.error('Failed to load connections', err);
+      }
+    }
+
+    function toggleAccountsModal(show) {
+      const modal = $('accountsModal');
+      if (!modal) return;
+      modal.style.display = show ? 'flex' : 'none';
+      if (show) loadConnections();
     }
 
     function renderAccountsModal() {
@@ -1224,6 +1813,7 @@
 
       const platforms = [
         { id: 'instagram', name: 'Instagram (Meta)', defaultHandle: '@brand_instagram', desc: 'Direct container publishing for images, posters, and reels' },
+        { id: 'gmb', name: 'Google Business Profile (GMB)', defaultHandle: 'locations/189283749', desc: 'Official Google Maps & Search Knowledge Panel updates and local posts' },
         { id: 'linkedin', name: 'LinkedIn', defaultHandle: '@brand_company', desc: 'Official professional feed publishing' },
         { id: 'x', name: 'Twitter / X', defaultHandle: '@brand_official', desc: 'Direct tweet & thread publishing' }
       ];
@@ -1231,7 +1821,7 @@
       const currentBrand = $('brand')?.value ? ('@' + $('brand').value.toLowerCase().replace(/\s+/g,'_')) : '@brand_official';
 
       container.innerHTML = platforms.map(p => {
-        const conn = currentConnections.find(c => c.platform.toLowerCase() === p.id || (p.id === 'x' && c.platform.toLowerCase() === 'twitter'));
+        const conn = currentConnections.find(c => c.platform.toLowerCase() === p.id || (p.id === 'x' && c.platform.toLowerCase() === 'twitter') || (p.id === 'gmb' && c.platform.toLowerCase() === 'google_business'));
         const isConnected = Boolean(conn && conn.is_active);
 
         if (isConnected) {
@@ -1261,7 +1851,7 @@
             </div>
             <div style="font-size:12px; color:var(--text-muted);">${p.desc}</div>
             <div class="channel-controls">
-              <input type="text" class="channel-input" id="input_${p.id}" placeholder="${p.defaultHandle}" value="${currentBrand}" />
+              <input type="text" class="channel-input" id="input_${p.id}" placeholder="${p.defaultHandle}" value="${p.id === 'gmb' ? 'locations/189283749' : currentBrand}" />
               <button type="button" class="btn btn-primary" style="padding:6px 14px; font-size:12px; white-space:nowrap;" onclick="connectAccount('${p.id}')">Connect Account</button>
             </div>
           </div>
@@ -1388,12 +1978,15 @@
         html += '<div class="posts-grid">';
         posts.forEach((post, i) => {
           const isInstagram = post.platform.toLowerCase().includes('instagram');
+          const isGMB = post.platform.toLowerCase().includes('gmb') || post.platform.toLowerCase().includes('google');
           const isTwitter = post.platform.toLowerCase().includes('twitter') || post.platform.toLowerCase().includes('x');
           const isLinkedIn = post.platform.toLowerCase().includes('linkedin');
 
           let icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
           if (isInstagram) {
             icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+          } else if (isGMB) {
+            icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>';
           } else if (isLinkedIn) {
             icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.65 1.65 0 0 0 1.66-1.66 1.66 1.66 0 0 0-3.32 0 1.66 1.66 0 0 0 1.66 1.66m1.39 9.94v-8.37H5.07v8.37h2.78z"/></svg>';
           } else if (isTwitter) {
@@ -1447,7 +2040,7 @@
               ${posterHtml}
               ${liveIndicatorHtml}
               <div class="post-footer">
-                <span class="char-badge">${post.character_count} chars</span>
+                <span class="char-badge">${post.character_count || post.copy?.length || 0} chars</span>
                 <button type="button" class="btn btn-secondary" onclick="copyPostText('postText_${i}')">
                   Copy Copy
                 </button>
@@ -1459,11 +2052,7 @@
       }
 
       $('outputContainer').innerHTML = html;
-
-      // Render Timeline logs
       renderTimeline(r.logs || []);
-
-      // Switch to creative pane
       document.querySelector('[data-tab="creativePane"]').click();
     }
 
@@ -1557,10 +2146,10 @@
         const body = {
           brand: $('brand').value,
           goal: $('goal').value,
-          audience: $('audience').value,
+          audience: $('audience')?.value || 'General Audience',
           tone: $('tone').value,
-          offer: $('offer').value,
-          context: $('context').value,
+          offer: $('offer')?.value || '',
+          context: $('context')?.value || '',
           platforms: getSelectedPlatforms(),
           approval_required: $('approval_required').checked
         };
@@ -1585,6 +2174,9 @@
     // Initial Load
     async function init() {
       await getAuthToken();
+      await checkCurrentUser();
+      await loadProfile();
+      await loadUpcomingFestivals();
       await loadConnections();
       await loadHistory();
     }

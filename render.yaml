@@ -32,6 +32,6 @@ services:
       - key: LLM_TIMEOUT_SECONDS
         value: "45"
       - key: ENABLE_LIVE_SEARCH
-        value: "false"
+        value: "true"
       - key: TAVILY_API_KEY
         sync: false

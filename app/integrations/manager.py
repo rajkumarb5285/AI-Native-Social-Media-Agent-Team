@@ -8,6 +8,7 @@ from app.integrations.base import BaseSocialAdapter, ConnectionRecord, PlatformP
 from app.integrations.linkedin import LinkedInAdapter
 from app.integrations.twitter import TwitterAdapter
 from app.integrations.instagram import InstagramAdapter
+from app.integrations.gmb import GMBAdapter
 from app.db.migrations import run_migrations
 
 
@@ -19,6 +20,8 @@ class PlatformManager:
             "twitter": TwitterAdapter(),
             "x": TwitterAdapter(),
             "instagram": InstagramAdapter(),
+            "gmb": GMBAdapter(),
+            "google_business": GMBAdapter(),
         }
 
     def _db(self):

@@ -153,3 +153,134 @@ def test_linkedin_oauth_requires_client_secret(client, monkeypatch):
     assert response.status_code == 503
     assert "LINKEDIN_CLIENT_SECRET" in response.json()["detail"]
 
+
+def test_auth_register_and_login(client):
+    reg_resp = client.post("/api/auth/register", json={
+        "email": "fresh.user@example.com",
+        "password": "StrongPassword123!",
+        "tenant_id": "tenant_brand_x"
+    })
+    assert reg_resp.status_code == 200
+    reg_data = reg_resp.json()
+    assert "access_token" in reg_data
+    assert reg_data["user"]["email"] == "fresh.user@example.com"
+    assert reg_data["user"]["tenant_id"] == "tenant_brand_x"
+
+    # Attempt duplicate registration
+    dup_resp = client.post("/api/auth/register", json={
+        "email": "fresh.user@example.com",
+        "password": "StrongPassword123!"
+    })
+    assert dup_resp.status_code == 400
+
+    # Successful login
+    login_resp = client.post("/api/auth/login", json={
+        "email": "fresh.user@example.com",
+        "password": "StrongPassword123!"
+    })
+    assert login_resp.status_code == 200
+    assert "access_token" in login_resp.json()
+
+    # Wrong password login
+    bad_login = client.post("/api/auth/login", json={
+        "email": "fresh.user@example.com",
+        "password": "WrongPassword!"
+    })
+    assert bad_login.status_code == 401
+
+
+def test_auth_google_and_quick_access(client):
+    google_resp = client.post("/api/auth/google", json={
+        "email": "sarah.director@agency.io",
+        "name": "Sarah Connor"
+    })
+    assert google_resp.status_code == 200
+    assert "access_token" in google_resp.json()
+    assert google_resp.json()["user"]["email"] == "sarah.director@agency.io"
+
+    quick_resp = client.post("/api/auth/quick-access")
+    assert quick_resp.status_code == 200
+    assert "access_token" in quick_resp.json()
+    assert quick_resp.json()["user"]["email"] == "operator@dhanda.ai"
+
+
+def test_business_profile_crud(client):
+    # GET default profile
+    get_res = client.get("/api/profile")
+    assert get_res.status_code == 200
+    prof = get_res.json()
+    assert "business_name" in prof
+    assert "rating" in prof
+
+    # POST update profile
+    update_res = client.post("/api/profile", json={
+        "business_name": "Royal Jewellers & Co",
+        "category": "Luxury Fine Jewelry",
+        "phone": "+91 99887 76655",
+        "address": "Indiranagar 100ft Rd, Bangalore",
+        "website": "https://royaljewellers.co.in",
+        "tagline": "Pure Gold & Diamond Craftsmanship",
+        "rating": "5.0 ★★★★★",
+        "review_count": "540+ Google Reviews",
+        "primary_color": "#d97706"
+    })
+    assert update_res.status_code == 200
+    updated = update_res.json()["profile"]
+    assert updated["business_name"] == "Royal Jewellers & Co"
+
+    # Verify updated profile persists
+    reget = client.get("/api/profile")
+    assert reget.status_code == 200
+    assert reget.json()["business_name"] == "Royal Jewellers & Co"
+    assert reget.json()["phone"] == "+91 99887 76655"
+
+
+def test_festivals_upcoming_and_generate(client):
+    fest_resp = client.get("/api/festivals/upcoming")
+    assert fest_resp.status_code == 200
+    fest_data = fest_resp.json()
+    assert fest_data["count"] > 0
+    first_fest = fest_data["festivals"][0]
+    assert "id" in first_fest
+    assert "name" in first_fest
+
+    # Generate festival campaign
+    gen_resp = client.post("/api/festivals/generate", json={
+        "festival_id": first_fest["id"],
+        "custom_offer": "Flat 25% Off Storewide during the celebration!",
+        "platforms": ["Instagram", "GMB"],
+        "auto_publish": False
+    })
+    assert gen_resp.status_code == 200
+    gen_data = gen_resp.json()
+    assert gen_data["status"] == "generated"
+    assert "poster_url" in gen_data["post"]
+    assert gen_data["post"]["poster_url"].startswith("data:image/svg+xml;base64,")
+    assert "Flat 25% Off" in gen_data["post"]["copy"]
+
+
+def test_templates_and_poster_render(client):
+    tmpl_resp = client.get("/api/templates")
+    assert tmpl_resp.status_code == 200
+    templates = tmpl_resp.json()["templates"]
+    assert len(templates) >= 5
+    archetypes = [t["id"] for t in templates]
+    assert "festival_diwali" in archetypes
+    assert "gmb_local" in archetypes
+    assert "luxury_gold" in archetypes
+
+    # Render custom poster
+    render_resp = client.post("/api/poster/render", json={
+        "title": "Grand Weekend Festival Showcase",
+        "subtitle": "Exclusive Deals & Instant Delivery",
+        "theme": "promotional_offer",
+        "business_name": "Metro Retailers",
+        "phone": "+91 91234 56789",
+        "website": "https://metroretail.in",
+        "rating": "4.9 ★★★★★"
+    })
+    assert render_resp.status_code == 200
+    rdata = render_resp.json()
+    assert rdata["theme"] == "promotional_offer"
+    assert rdata["poster_url"].startswith("data:image/svg+xml;base64,")
+

@@ -50,3 +50,35 @@ def run_migrations(db_path: str):
           status TEXT NOT NULL, result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
           PRIMARY KEY (tenant_id, platform, idempotency_key)
         )""")
+
+        # Business profiles table (Dhanda AI Marketing profile, GMB details, local branding)
+        con.execute("""CREATE TABLE IF NOT EXISTS business_profiles (
+          tenant_id TEXT PRIMARY KEY,
+          business_name TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'General Business',
+          phone TEXT NOT NULL DEFAULT '',
+          address TEXT NOT NULL DEFAULT '',
+          website TEXT NOT NULL DEFAULT '',
+          tagline TEXT NOT NULL DEFAULT '',
+          rating TEXT NOT NULL DEFAULT '4.9 ★★★★★',
+          review_count TEXT NOT NULL DEFAULT '120+ Google Reviews',
+          logo_url TEXT,
+          primary_color TEXT NOT NULL DEFAULT '#6366f1',
+          gmb_location_id TEXT,
+          updated_at TEXT NOT NULL
+        )""")
+
+        # Scheduled festival & promotional posts queue
+        con.execute("""CREATE TABLE IF NOT EXISTS scheduled_posts (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          festival_id TEXT,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          poster_url TEXT,
+          platforms_json TEXT NOT NULL,
+          scheduled_date TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'scheduled',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )""")

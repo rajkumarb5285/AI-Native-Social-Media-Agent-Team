@@ -32,6 +32,17 @@ def hash_password(password: str, salt: Optional[str] = None) -> str:
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_value.encode("utf-8"), 310_000)
     return f"{salt_value}${base64.urlsafe_b64encode(digest).decode().rstrip('=')}"
 
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against salt and PBKDF2-HMAC-SHA256 digest."""
+    try:
+        if not hashed or "$" not in hashed:
+            return False
+        salt, _ = hashed.split("$", 1)
+        expected = hash_password(password, salt=salt)
+        return hmac.compare_digest(expected.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
 def create_jwt(user: AuthenticatedUser, expires_in_seconds: int = 86400) -> str:
     header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode()).decode().rstrip("=")
     payload_data = {"sub": user.user_id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id, "exp": int(time.time()) + expires_in_seconds}
