@@ -42,6 +42,11 @@ docker compose up --build
 ```
 Open http://localhost:8000
 
+## Cloud Deployment (Render & Vercel)
+- **Backend & AI Agent Team**: Hosted on [Render](https://render.com) via Infrastructure Blueprint [`render.yaml`](file:///c:/Users/Rajkumar%20Pandey/Downloads/ai-native-social-agent-team/ai-native-social-agent-team/render.yaml).
+- **Frontend Dashboard**: Hosted on [Vercel](https://vercel.com) via edge static CDN [`vercel.json`](file:///c:/Users/Rajkumar%20Pandey/Downloads/ai-native-social-agent-team/ai-native-social-agent-team/vercel.json) and [`frontend/`](file:///c:/Users/Rajkumar%20Pandey/Downloads/ai-native-social-agent-team/ai-native-social-agent-team/frontend).
+- See detailed instructions in the [Deployment Guide](file:///c:/Users/Rajkumar%20Pandey/Downloads/ai-native-social-agent-team/ai-native-social-agent-team/docs/DEPLOYMENT.md#L112).
+
 ## API
 - `GET /api/health` — health and mode
 - `GET /api/agents` — available workflow roles
