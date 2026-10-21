@@ -321,27 +321,32 @@ async def publish_run(run_id: str, user: AuthenticatedUser = Depends(require_rol
         raise HTTPException(404, "Run not found")
     if not r["approved"]:
         raise HTTPException(403, "Cannot publish unapproved draft. Explicit human approval is required.")
-
-    connections = platform_manager.list_connections(user.tenant_id)
-    if not connections:
-        audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_BLOCKED_NO_CONNECTIONS", run_id)
-        raise HTTPException(412, "Publishing blocked: No verified official platform connections are configured for this workspace.")
-
     result_data = json.loads(r["result_json"]) if r["result_json"] else {}
     posts = result_data.get("content", [])
+    if not posts:
+        raise HTTPException(409, "This run has no stored content to publish.")
+    connections = platform_manager.list_connections(user.tenant_id)
     publish_outcomes = []
     for post in posts:
+        platform = str(post.get("platform", "")).lower()
+        matching = next((c for c in connections if c.platform.lower() == platform or (platform == "x" and c.platform.lower() == "twitter")), None)
+        if matching is None:
+            publish_outcomes.append({"success": False, "platform": post.get("platform"), "error_message": "No connected account for this platform and workspace."})
+            continue
         res = await platform_manager.publish(
-            platform=post["platform"],
-            connection_id=connections[0].connection_id,
-            copy=post["copy"],
-            idempotency_key=f"pub_{run_id}_{post['platform']}"
+            platform=platform,
+            connection_id=matching.connection_id,
+            copy=str(post.get("copy", "")),
+            idempotency_key=f"pub_{run_id}_{platform}",
+            tenant_id=user.tenant_id
         )
         publish_outcomes.append(res.model_dump())
-
-    audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_EXECUTED", run_id, {"outcomes": publish_outcomes})
-    return {"id": run_id, "status": "published", "outcomes": publish_outcomes}
-
+    all_success = len(publish_outcomes) == len(posts) and all(item.get("success") and item.get("external_post_id") for item in publish_outcomes)
+    final_status = "published" if all_success else "publish_partial_or_failed"
+    with db() as con:
+        con.execute("UPDATE runs SET status=?, updated_at=? WHERE id=? AND tenant_id=?", (final_status, now(), run_id, user.tenant_id))
+    audit_logger.log(user.tenant_id, user.user_id, "PUBLISH_EXECUTED" if all_success else "PUBLISH_PARTIAL_OR_FAILED", run_id, {"outcomes": publish_outcomes})
+    return {"id": run_id, "status": final_status, "outcomes": publish_outcomes, "all_published": all_success}
 @app.get("/api/audit")
 def get_audit_trail(user: AuthenticatedUser = Depends(require_role(["admin"]))):
     with db() as con:
