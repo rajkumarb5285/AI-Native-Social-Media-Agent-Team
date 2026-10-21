@@ -101,7 +101,7 @@ class AgentGraph:
         log("MarketRadar", "Retrieving real research sources or explicitly-labelled hypotheses.", "started")
         radar_res = await self.market_radar.execute(MarketRadarInput(
             brand=brand, goal=goal, audience=audience, context=context,
-            enable_live_search=live_search_enabled
+            enable_live_search=(live_search_enabled or __import__("os").getenv("ENABLE_LIVE_SEARCH", "false").lower() == "true")
         ))
         require_success("MarketRadar", radar_res)
         log("MarketRadar", radar_res.hypothesis_summary, "completed",
