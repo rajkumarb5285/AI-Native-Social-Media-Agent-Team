@@ -425,7 +425,7 @@ async def finish_social_connect(platform: str, code: str | None = None, state: s
                                error: str | None = None, error_description: str | None = None):
     platform = platform.lower()
     if error:
-        message = f"Social platform authorization failed: {error}. {error_description or \"\"}".strip()
+        message = f"Social platform authorization failed: {error}. {error_description or ''}".strip()
         raise HTTPException(400, message)
     if not code or not state:
         raise HTTPException(400, "OAuth callback requires both code and state.")
