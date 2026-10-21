@@ -71,6 +71,7 @@ from app.security.audit import AuditLogger
 from app.security.rate_limit import check_rate_limit
 from app.integrations.manager import platform_manager
 from app.integrations.base import ConnectionRecord
+from urllib.parse import urlparse
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
@@ -369,8 +370,11 @@ def start_social_connect(platform: str, user: AuthenticatedUser = Depends(requir
     if not os.getenv(client_id_name, "").strip():
         raise HTTPException(503, f"{client_id_name} is not configured.")
     public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+    parsed_base = urlparse(public_base) if public_base else None
     if not public_base:
         raise HTTPException(503, "Set PUBLIC_BASE_URL to the HTTPS URL of this deployed API.")
+    if parsed_base.scheme != "https" and os.getenv("ENVIRONMENT", "development").lower() not in {"development", "test"}:
+        raise HTTPException(503, "PUBLIC_BASE_URL must use HTTPS outside development/test.")
     redirect_uri = f"{public_base}/api/connections/{platform}/callback"
     state = uuid.uuid4().hex + uuid.uuid4().hex
     _oauth_state_table()
@@ -392,7 +396,11 @@ async def finish_social_connect(platform: str, code: str, state: str):
         row = con.execute("SELECT * FROM oauth_states WHERE state=? AND platform=?", (state, platform)).fetchone()
         if not row:
             raise HTTPException(400, "OAuth state is invalid, expired, or already used.")
-        # One-time state prevents replay.
+        # One-time state prevents replay; expire stale attempts after 10 minutes.
+        created = datetime.datetime.fromisoformat(row["created_at"])
+        if (datetime.datetime.now(datetime.timezone.utc) - created).total_seconds() > 600:
+            con.execute("DELETE FROM oauth_states WHERE state=?", (state,))
+            raise HTTPException(400, "OAuth state expired. Start account connection again.")
         con.execute("DELETE FROM oauth_states WHERE state=?", (state,))
     adapter = platform_manager.get_adapter(platform)
     if not adapter:
