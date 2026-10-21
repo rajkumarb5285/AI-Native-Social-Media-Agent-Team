@@ -42,3 +42,11 @@ def run_migrations(db_path: str):
           role TEXT NOT NULL DEFAULT 'editor', tenant_id TEXT NOT NULL DEFAULT 'default',
           is_active INTEGER NOT NULL DEFAULT 1
         )""")
+
+        # Durable publication idempotency ledger. A reserved key is never silently retried
+        # after an uncertain outcome, because the platform may already have created the post.
+        con.execute("""CREATE TABLE IF NOT EXISTS publish_idempotency (
+          tenant_id TEXT NOT NULL, platform TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+          status TEXT NOT NULL, result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          PRIMARY KEY (tenant_id, platform, idempotency_key)
+        )""")
