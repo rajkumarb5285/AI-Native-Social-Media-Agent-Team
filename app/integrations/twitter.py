@@ -104,6 +104,11 @@ class TwitterAdapter(BaseSocialAdapter):
             return False
 
     async def publish_draft(self, connection: ConnectionRecord, copy: str, media_urls: list[str], idempotency_key: str) -> PlatformPublishResult:
+        if media_urls:
+            return PlatformPublishResult(
+                success=False, platform="twitter", idempotency_key=idempotency_key,
+                error_message="X media upload is not implemented; refusing to publish text while silently dropping media."
+            )
         if not connection.is_active:
             return PlatformPublishResult(success=False, platform="twitter", idempotency_key=idempotency_key, error_message="Connection is inactive or revoked.")
         token = decrypt_token(connection.encrypted_access_token)
