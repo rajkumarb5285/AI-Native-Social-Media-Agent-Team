@@ -40,6 +40,9 @@ def test_twitter_adapter_connect_url():
     assert "twitter.com/i/oauth2/authorize" in url
     assert "client_id=test_tw_client" in url
     assert "state=state_abc" in url
+    assert "code_challenge_method=S256" in url
+    assert "code_challenge=" in url
+    assert "code_challenge=challenge" not in url
 
 @pytest.mark.asyncio
 async def test_platform_manager_publish_and_idempotency():
