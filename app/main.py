@@ -31,20 +31,10 @@ AGENTS = [
 ]
 
 from contextlib import asynccontextmanager
+from app.services.llm.json_utils import clean_and_parse_json
 from app.agents.graph import AgentGraph
 
 agent_graph = AgentGraph()
-
-def clean_and_parse_json(raw: str) -> dict[str, Any]:
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if len(lines) >= 2 and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    return json.loads(text)
 
 class RunRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=120)
