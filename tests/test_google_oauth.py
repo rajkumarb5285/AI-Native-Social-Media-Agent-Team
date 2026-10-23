@@ -211,3 +211,30 @@ def test_data_export_and_account_deletion(client):
     # Verify user is deleted
     me_resp = client.get("/auth/me", headers=headers)
     assert me_resp.status_code == 401
+
+def test_appwrite_google_auth_exchange(client):
+    """Verify Appwrite Google user exchange provisions user and returns valid session."""
+    test_id = f"apw_usr_{datetime.datetime.now().timestamp()}"
+    test_email = f"appwrite.user.{datetime.datetime.now().timestamp()}@gmail.com"
+
+    resp = client.post("/api/auth/appwrite", json={
+        "appwrite_user_id": test_id,
+        "email": test_email,
+        "name": "Appwrite Verified User",
+        "email_verified": True
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "access_token" in data
+    assert data["user"]["email"] == test_email
+    assert data["user"]["name"] == "Appwrite Verified User"
+
+    # Verify session cookie was issued
+    assert SESSION_COOKIE_NAME in resp.cookies
+    session_id = resp.cookies[SESSION_COOKIE_NAME]
+
+    # Verify /auth/me works with session cookie
+    me_resp = client.get("/auth/me", cookies={SESSION_COOKIE_NAME: session_id})
+    assert me_resp.status_code == 200
+    assert me_resp.json()["email"] == test_email

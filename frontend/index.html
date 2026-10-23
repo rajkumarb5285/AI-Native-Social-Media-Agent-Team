@@ -1299,6 +1299,7 @@
     }
   </style>
 
+  <script src="https://cdn.jsdelivr.net/npm/appwrite@14.0.1"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -1686,7 +1687,7 @@
       <!-- View 1: Main Sign-In Screen -->
       <div id="authViewCredentials">
         <!-- Official Google Sign-In Button (Calls real Server-Side Authorization Code Flow with PKCE) -->
-        <a href="/auth/google/login" id="btnGoogleSignIn" class="btn-google-official">
+        <a href="/auth/google/login" id="btnGoogleSignIn" class="btn-google-official" onclick="initiateGoogleLogin(event)">
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -1835,6 +1836,25 @@
     function apiUrl(path) {
       if (!path.startsWith('/')) path = '/' + path;
       return apiBase ? (apiBase + path) : path;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Appwrite Client & Google OAuth2 Integration (Project: nexussocialmedia)
+    // ---------------------------------------------------------------------------
+    const APPWRITE_ENDPOINT = 'https://fra.cloud.appwrite.io/v1';
+    const APPWRITE_PROJECT_ID = '6adb9d5e003b622dd710';
+    let appwriteClient = null;
+    let appwriteAccount = null;
+
+    try {
+      if (window.Appwrite) {
+        appwriteClient = new window.Appwrite.Client()
+          .setEndpoint(APPWRITE_ENDPOINT)
+          .setProject(APPWRITE_PROJECT_ID);
+        appwriteAccount = new window.Appwrite.Account(appwriteClient);
+      }
+    } catch (e) {
+      console.warn('Appwrite SDK initialization:', e);
     }
 
     let authToken = localStorage.getItem('agent_team_token') || '';
@@ -2099,10 +2119,29 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Production Google OAuth 2.0 PKCE Flow Navigation
+    // Production Google OAuth 2.0 Flow via Appwrite & Server-Side PKCE
     // ---------------------------------------------------------------------------
-    function initiateGoogleLogin() {
-      // Directs browser to server-side Authorization Code Flow with PKCE
+    function initiateGoogleLogin(e) {
+      if (e) e.preventDefault();
+      const btnText = $('btnGoogleSignInText');
+      if (btnText) btnText.textContent = 'Connecting to Google…';
+
+      if (appwriteAccount && window.Appwrite && window.Appwrite.OAuthProvider) {
+        // Real Google OAuth via Appwrite Project nexussocialmedia (6adb9d5e003b622dd710)
+        const successUrl = `${window.location.origin}/?appwrite_auth=success`;
+        const failureUrl = `${window.location.origin}/?auth_error=Google+sign-in+cancelled+or+failed`;
+        try {
+          appwriteAccount.createOAuth2Session(
+            window.Appwrite.OAuthProvider.Google,
+            successUrl,
+            failureUrl
+          );
+          return;
+        } catch (err) {
+          console.warn('Appwrite createOAuth2Session failed, falling back to server PKCE:', err);
+        }
+      }
+      // Server-side Authorization Code Flow with PKCE fallback
       window.location.href = apiUrl('/auth/google/login');
     }
 
@@ -2360,6 +2399,13 @@
         await fetch(apiUrl('/auth/logout'), { method: 'POST', credentials: 'include' });
       } catch (e) {
         console.warn('Logout endpoint call error', e);
+      }
+      if (appwriteAccount) {
+        try {
+          await appwriteAccount.deleteSession('current');
+        } catch (e) {
+          // Ignore if no active Appwrite session
+        }
       }
       authToken = '';
       localStorage.removeItem('agent_team_token');
@@ -2986,7 +3032,39 @@
       // 1. Process URL parameters from Google OAuth redirection or errors
       const params = new URLSearchParams(window.location.search);
 
-      if (params.has('token')) {
+      if (params.has('appwrite_auth') && params.get('appwrite_auth') === 'success') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        if (appwriteAccount) {
+          try {
+            const apwUser = await appwriteAccount.get();
+            const res = await api('/api/auth/appwrite', {
+              method: 'POST',
+              body: JSON.stringify({
+                appwrite_user_id: apwUser.$id,
+                email: apwUser.email,
+                name: apwUser.name,
+                email_verified: apwUser.emailVerification
+              })
+            });
+            if (res.mfa_required) {
+              showMfaChallengeView(res);
+              return;
+            }
+            authToken = res.access_token;
+            localStorage.setItem('agent_team_token', authToken);
+            currentUser = res.user;
+            unlockWorkspace();
+            toast(`✓ Welcome ${currentUser.name || currentUser.email}! Signed in via Google.`);
+            await loadProfile();
+            await loadUpcomingFestivals();
+            await loadConnections();
+            await loadHistory();
+            return;
+          } catch (err) {
+            showAuthAlert(err.message || 'Appwrite Google login exchange failed.');
+          }
+        }
+      } else if (params.has('token')) {
         authToken = params.get('token');
         localStorage.setItem('agent_team_token', authToken);
         window.history.replaceState({}, document.title, window.location.pathname);
