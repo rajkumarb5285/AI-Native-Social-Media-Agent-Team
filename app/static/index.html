@@ -1091,11 +1091,109 @@
       width: 160px;
       height: 160px;
     }
+
+    /* ---------------------------------------------------------------------------
+     * Strict Enterprise Authentication Gate & Google SSO Styles
+     * --------------------------------------------------------------------------- */
+    .auth-gate-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 999999;
+      background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.18), rgba(10, 11, 16, 0.98) 75%), #0a0b10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .auth-gate-container {
+      width: 100%;
+      max-width: 460px;
+      background: rgba(18, 20, 32, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: var(--radius-lg);
+      padding: 34px 30px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 50px -10px rgba(99, 102, 241, 0.28);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      animation: authCardIn 0.35s ease-out;
+    }
+    @keyframes authCardIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .auth-gate-header {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+    .auth-brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 13px;
+      background: rgba(99, 102, 241, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #a5b4fc;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+    .auth-google-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px 18px;
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    }
+    .auth-google-btn:hover {
+      background: #f8fafc;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+    }
+    .auth-alert-box {
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    .auth-info-box {
+      background: rgba(59, 130, 246, 0.14);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #93c5fd;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
   </style>
+
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
+  <!-- Main Authenticated App (Strictly hidden until verified) -->
+  <div id="appRoot" style="display: none;">
   <!-- Header -->
   <header class="navbar">
     <div class="nav-container">
@@ -1119,9 +1217,13 @@
           <div class="pulse-dot"></div>
           <span>Active Operations</span>
         </div>
-        <div id="userAuthBtn" class="user-auth-pill" onclick="toggleAuthModal(true)" title="Account / Authentication">
-          <span id="userAuthLabel">Sign In</span>
+        <div id="userAuthBtn" class="user-auth-pill" onclick="toggleProfileDrawer(true)" title="Account & Business Profile">
+          <span id="userAuthLabel">Signed In</span>
         </div>
+        <button type="button" class="btn btn-secondary" onclick="handleLogout()" style="padding: 7px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;" title="Sign out of workspace">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Sign Out</span>
+        </button>
       </div>
     </div>
   </header>
@@ -1448,165 +1550,201 @@
     </div>
   </div>
 
-  <!-- Real-Time Authentication & MFA Suite Modal -->
-  <div id="authModal" class="modal-backdrop" style="display:none;" onclick="if(event.target === this) toggleAuthModal(false)">
-    <div class="modal-card" style="max-width: 440px;">
+  </div><!-- /appRoot -->
 
-      <!-- 1. Credentials View (Login / Register / Real Google SSO) -->
+  <!-- Strict Enterprise Authentication Gate (Home screen is strictly inaccessible without verified session) -->
+  <div id="authGate" class="auth-gate-screen">
+    <div class="auth-gate-container">
+
+      <!-- Header & Branding -->
+      <div class="auth-gate-header">
+        <div class="auth-brand-badge">
+          <span style="color:#6366f1;">✦</span> Enterprise Security Gate
+        </div>
+        <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px;">
+          <div class="brand-logo" style="width:38px; height:38px;">
+            <svg viewBox="0 0 24 24" style="width:20px; height:20px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div style="font-size:22px; font-weight:800; letter-spacing:-0.03em; color:var(--text-primary);">
+            Nexus <span class="workspace-pill">Studio</span>
+          </div>
+        </div>
+        <div style="font-size:13px; color:var(--text-secondary); max-width:340px; margin:0 auto;">
+          AI-Native Social Media Operations Team. Authentication required to access workspace.
+        </div>
+      </div>
+
+      <!-- Real-Time Alert & Info Banner -->
+      <div id="authGateAlert" class="auth-alert-box" style="display:none;"></div>
+      <div id="authGateInfo" class="auth-info-box" style="display:none;"></div>
+
+      <!-- View 1: Credentials (Google SSO + Strict Email/Password) -->
       <div id="authViewCredentials">
-        <div class="modal-header">
-          <div>
-            <div class="modal-title" id="authModalTitle">Workspace Authentication</div>
-            <div class="modal-subtitle">Strict credentials, Google OAuth 2.0, & Multi-Factor Verification</div>
-          </div>
-          <button class="modal-close-btn" onclick="toggleAuthModal(false)">&times;</button>
+        <!-- Google OAuth 2.0 Real-Time Social Sign In -->
+        <div style="margin-bottom:18px;">
+          <button type="button" id="btnGoogleSignIn" class="auth-google-btn" onclick="initiateGoogleLogin()">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <span id="btnGoogleSignInText">Continue with Google</span>
+          </button>
         </div>
-        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
-          <!-- Auth Tabs -->
-          <div style="display:flex; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px;">
-            <button type="button" id="tabLoginBtn" class="tab-btn active" style="flex:1; justify-content:center;" onclick="switchAuthTab('login')">Sign In</button>
-            <button type="button" id="tabRegBtn" class="tab-btn" style="flex:1; justify-content:center;" onclick="switchAuthTab('register')">Create Account</button>
-          </div>
 
-          <!-- Real Google Sign-In -->
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            <button type="button" class="btn btn-secondary" onclick="handleGoogleSignInClick()" style="display:flex; align-items:center; justify-content:center; gap:10px; padding:10px; font-weight:600; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.04);">
-              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-              <span>Sign in with Google</span>
-            </button>
-            <div id="googleBtnContainer" style="display:flex; justify-content:center;"></div>
-          </div>
+        <div style="display:flex; align-items:center; gap:12px; margin: 16px 0;">
+          <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+          <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.06em;">Or with business credentials</span>
+          <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+        </div>
 
-          <div style="display:flex; align-items:center; gap:12px; margin: 4px 0;">
-            <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
-            <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Or with Business Email</span>
-            <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
-          </div>
+        <!-- Auth Tabs: Sign In / Create Account -->
+        <div style="display:flex; border-bottom: 1px solid var(--border-subtle); margin-bottom: 16px;">
+          <button type="button" id="tabLoginBtn" class="tab-btn active" style="flex:1; justify-content:center; padding:10px 0;" onclick="switchAuthTab('login')">Sign In</button>
+          <button type="button" id="tabRegBtn" class="tab-btn" style="flex:1; justify-content:center; padding:10px 0;" onclick="switchAuthTab('register')">Create Account</button>
+        </div>
 
-          <!-- Strict Email & Password Form -->
-          <form id="authForm" onsubmit="handleAuthSubmit(event)" style="display:flex; flex-direction:column; gap:12px;">
-            <div id="regExtraFields" style="display:none; flex-direction:column; gap:12px;">
-              <div class="field-group">
-                <label class="field-label" for="auth_bizname">Business / Store Name</label>
-                <input type="text" id="auth_bizname" placeholder="e.g. Apex Innovations Ltd" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="auth_fullname">Full Name</label>
-                <input type="text" id="auth_fullname" placeholder="e.g. Alexander Vance" />
-              </div>
-            </div>
-
+        <!-- Strict Auth Form -->
+        <form id="authForm" onsubmit="handleAuthSubmit(event)" style="display:flex; flex-direction:column; gap:14px;">
+          <div id="regExtraFields" style="display:none; flex-direction:column; gap:12px;">
             <div class="field-group">
-              <label class="field-label" for="auth_email">Business Email Address *</label>
-              <input type="email" id="auth_email" required placeholder="founder@company.com" />
+              <label class="field-label" for="auth_bizname">Business / Brand Name</label>
+              <input type="text" id="auth_bizname" placeholder="e.g. Apex Innovations Ltd" />
             </div>
-
             <div class="field-group">
+              <label class="field-label" for="auth_fullname">Full Name</label>
+              <input type="text" id="auth_fullname" placeholder="e.g. Alexander Vance" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="auth_email">Business Email Address *</label>
+            <input type="email" id="auth_email" required placeholder="founder@company.com" autocomplete="email" />
+          </div>
+
+          <div class="field-group">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
               <label class="field-label" for="auth_password">Password *</label>
-              <input type="password" id="auth_password" required placeholder="Min 8 chars with letter & number" />
-              <div class="field-hint" id="pwdHint" style="display:none; font-size:11px; color:var(--text-muted);">Must be at least 8 characters long and contain letters and numbers.</div>
+              <span onclick="togglePasswordVisibility()" style="font-size:11px; color:var(--text-muted); cursor:pointer; user-select:none;">Show / Hide</span>
             </div>
+            <input type="password" id="auth_password" required placeholder="Min 8 chars with letters & numbers" autocomplete="current-password" />
+            <div class="field-hint" id="pwdHint" style="display:none; font-size:11px; color:var(--text-muted);">Must be at least 8 characters long and contain letters and numbers.</div>
+          </div>
 
-            <div id="regMfaCheckbox" style="display:none; align-items:center; gap:8px; margin-top:2px;">
-              <input type="checkbox" id="auth_enable_mfa" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;" checked />
-              <label for="auth_enable_mfa" style="font-size:12px; color:var(--text-secondary); cursor:pointer;">
-                Enable Google Authenticator (MFA) immediately
-              </label>
-            </div>
+          <div id="regMfaCheckbox" style="display:none; align-items:center; gap:8px; margin-top:2px;">
+            <input type="checkbox" id="auth_enable_mfa" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;" checked />
+            <label for="auth_enable_mfa" style="font-size:12px; color:var(--text-secondary); cursor:pointer;">
+              Enable Two-Factor Authentication (Google Authenticator)
+            </label>
+          </div>
 
-            <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="margin-top:6px; justify-content:center;">
-              Sign In to Workspace
+          <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="margin-top:6px; justify-content:center; padding:12px; font-weight:600; font-size:14px;">
+            Sign In to Workspace
+          </button>
+        </form>
+
+        <!-- Google OAuth Credentials Configuration Accordion -->
+        <div style="margin-top: 20px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:11px; color:var(--text-muted);">Google Cloud OAuth Credentials</span>
+            <button type="button" onclick="toggleGoogleOAuthConfig()" style="background:transparent; border:none; color:#818cf8; font-size:11px; cursor:pointer; text-decoration:underline;">
+              <span id="btnGoogleCfgLabel">Configure OAuth Client</span>
             </button>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <span style="font-size:11px; color:var(--text-muted);">Cryptographic PBKDF2 hashing + salted tokens.</span>
-          <button class="btn btn-secondary" onclick="toggleAuthModal(false)">Close</button>
+          </div>
+          <div id="googleOAuthConfigBox" style="display:none; margin-top:12px; background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:14px;">
+            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
+              Configure your Google Cloud OAuth 2.0 Web Application credentials for this instance.
+            </div>
+            <div class="field-group" style="margin-bottom:10px;">
+              <label class="field-label" for="cfg_google_client_id">Google Client ID</label>
+              <input type="text" id="cfg_google_client_id" placeholder="123456789-xyz.apps.googleusercontent.com" style="font-size:12px;" />
+            </div>
+            <div class="field-group" style="margin-bottom:10px;">
+              <label class="field-label" for="cfg_google_client_secret">Google Client Secret</label>
+              <input type="password" id="cfg_google_client_secret" placeholder="GOCSPX-..." style="font-size:12px;" />
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+              <button type="button" class="btn btn-secondary" onclick="saveGoogleOAuthConfig()" style="font-size:11px; padding:6px 14px;">
+                Save Credentials
+              </button>
+              <span id="cfgSaveStatus" style="font-size:11px; color:var(--text-muted);"></span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 2. MFA Challenge View (6-Digit OTP / Google Authenticator) -->
-      <div id="authViewMfaChallenge" style="display:none;">
-        <div class="modal-header">
-          <div>
-            <div class="modal-title" style="display:flex; align-items:center; gap:8px;">
-              <span style="color:#10b981;">🛡️</span> Two-Step Verification
-            </div>
-            <div class="modal-subtitle">Enter your 6-digit Google Authenticator code or security OTP</div>
+      <!-- View 2: MFA 6-Digit OTP / Authenticator Challenge -->
+      <div id="authViewMfaChallenge" style="display:none; text-align:center;">
+        <div style="margin-bottom:20px;">
+          <div style="width:48px; height:48px; border-radius:50%; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto; font-size:22px;">
+            🛡️
           </div>
-          <button class="modal-close-btn" onclick="toggleAuthModal(false)">&times;</button>
-        </div>
-        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px; text-align:center;">
+          <div style="font-size:18px; font-weight:700; color:var(--text-primary); margin-bottom:6px;">Two-Step Verification</div>
           <div style="font-size:13px; color:var(--text-secondary);">
-            Verifying account for <strong id="mfaTargetEmail" style="color:var(--text-primary);">user@business.com</strong>
+            Enter the 6-digit code from Google Authenticator or security OTP for <strong id="mfaTargetEmail" style="color:#a5b4fc;">user@business.com</strong>
           </div>
-
-          <!-- 6-Digit OTP Box Grid -->
-          <div class="otp-input-container">
-            <input type="text" class="otp-box" id="otp_1" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
-            <input type="text" class="otp-box" id="otp_2" maxlength="1" inputmode="numeric" />
-            <input type="text" class="otp-box" id="otp_3" maxlength="1" inputmode="numeric" />
-            <input type="text" class="otp-box" id="otp_4" maxlength="1" inputmode="numeric" />
-            <input type="text" class="otp-box" id="otp_5" maxlength="1" inputmode="numeric" />
-            <input type="text" class="otp-box" id="otp_6" maxlength="1" inputmode="numeric" />
-          </div>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
-            <span id="mfaCountdown" style="color:var(--warning);">⏱ Code valid for 05:00</span>
-            <button type="button" class="btn btn-secondary" onclick="resendMfaOtp()" style="padding:4px 10px; font-size:11px;">Resend OTP</button>
-          </div>
-
-          <button type="button" id="mfaSubmitBtn" class="btn btn-primary" onclick="submitMfaVerification()" style="justify-content:center; padding:10px;">
-            Verify Code & Complete Sign-In
-          </button>
         </div>
-        <div class="modal-footer" style="justify-content:space-between;">
-          <button type="button" class="btn btn-secondary" onclick="resetToCredentialsView()" style="font-size:11px;">← Back to Sign In</button>
-          <button class="btn btn-secondary" onclick="toggleAuthModal(false)">Cancel</button>
+
+        <!-- 6-Digit OTP Box Grid -->
+        <div class="otp-input-container" style="margin-bottom:18px;">
+          <input type="text" class="otp-box" id="otp_1" maxlength="1" inputmode="numeric" autocomplete="one-time-code" />
+          <input type="text" class="otp-box" id="otp_2" maxlength="1" inputmode="numeric" />
+          <input type="text" class="otp-box" id="otp_3" maxlength="1" inputmode="numeric" />
+          <input type="text" class="otp-box" id="otp_4" maxlength="1" inputmode="numeric" />
+          <input type="text" class="otp-box" id="otp_5" maxlength="1" inputmode="numeric" />
+          <input type="text" class="otp-box" id="otp_6" maxlength="1" inputmode="numeric" />
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:20px;">
+          <span id="mfaCountdown" style="color:var(--warning);">⏱ Code valid for 05:00</span>
+          <button type="button" class="btn btn-secondary" onclick="resendMfaOtp()" style="padding:4px 10px; font-size:11px;">Resend OTP</button>
+        </div>
+
+        <button type="button" id="mfaSubmitBtn" class="btn btn-primary" onclick="submitMfaVerification()" style="width:100%; justify-content:center; padding:12px; font-weight:600;">
+          Verify & Unlock Workspace
+        </button>
+
+        <div style="margin-top:16px;">
+          <button type="button" onclick="resetToCredentialsView()" style="background:transparent; border:none; color:var(--text-muted); font-size:12px; cursor:pointer;">
+            ← Back to Sign In
+          </button>
         </div>
       </div>
 
-      <!-- 3. Google Authenticator Setup View (QR Code Onboarding) -->
-      <div id="authViewMfaSetup" style="display:none;">
-        <div class="modal-header">
-          <div>
-            <div class="modal-title" style="display:flex; align-items:center; gap:8px;">
-              <span style="color:#6366f1;">📲</span> Google Authenticator Setup
-            </div>
-            <div class="modal-subtitle">Scan QR code using Google Authenticator or Microsoft Authenticator</div>
-          </div>
-          <button class="modal-close-btn" onclick="toggleAuthModal(false)">&times;</button>
+      <!-- View 3: In-App MFA Setup / QR Code View -->
+      <div id="authViewMfaSetup" style="display:none; text-align:center;">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:18px; font-weight:700; color:var(--text-primary); margin-bottom:6px;">📲 Google Authenticator Setup</div>
+          <div style="font-size:12px; color:var(--text-secondary);">Scan this QR code using Google Authenticator or Microsoft Authenticator</div>
         </div>
-        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px; text-align:center;">
-          <div class="qr-card">
-            <img id="mfaQrImg" src="" alt="Google Authenticator QR Code" />
-          </div>
 
-          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px;">
-            <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Manual Setup Secret Key:</div>
-            <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
-              <code id="mfaSecretText" style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#a5b4fc; letter-spacing:0.1em;">----</code>
-              <button type="button" class="btn btn-secondary" onclick="copyMfaSecret()" style="padding:3px 8px; font-size:10px;">Copy</button>
-            </div>
-          </div>
+        <div class="qr-card" style="margin-bottom:16px;">
+          <img id="mfaQrImg" src="" alt="Google Authenticator QR Code" />
+        </div>
 
-          <div class="field-group" style="text-align:left;">
-            <label class="field-label" for="setup_verify_code">Enter 6-digit code shown in Authenticator app *</label>
-            <input type="text" id="setup_verify_code" maxlength="6" placeholder="123456" style="text-align:center; font-family:'JetBrains Mono',monospace; font-size:18px; letter-spacing:0.2em;" />
+        <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px; margin-bottom:16px;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Manual Setup Secret Key:</div>
+          <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
+            <code id="mfaSecretText" style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#a5b4fc; letter-spacing:0.1em;">----</code>
+            <button type="button" class="btn btn-secondary" onclick="copyMfaSecret()" style="padding:3px 8px; font-size:10px;">Copy</button>
           </div>
+        </div>
 
-          <button type="button" id="btnActivateMfa" class="btn btn-primary" onclick="activateMfaFromSetup()" style="justify-content:center; padding:10px;">
-            Verify & Activate Two-Factor Authentication
+        <div class="field-group" style="text-align:left; margin-bottom:16px;">
+          <label class="field-label" for="setup_verify_code">Enter 6-digit code shown in Authenticator app *</label>
+          <input type="text" id="setup_verify_code" maxlength="6" placeholder="123456" style="text-align:center; font-family:'JetBrains Mono',monospace; font-size:18px; letter-spacing:0.2em;" />
+        </div>
+
+        <button type="button" id="btnActivateMfa" class="btn btn-primary" onclick="activateMfaFromSetup()" style="width:100%; justify-content:center; padding:12px; font-weight:600;">
+          Verify & Activate Two-Factor Authentication
+        </button>
+
+        <div style="margin-top:14px;">
+          <button type="button" onclick="finishMfaSetup()" style="background:transparent; border:none; color:var(--text-muted); font-size:12px; cursor:pointer;">
+            Done / Return
           </button>
-        </div>
-        <div class="modal-footer" style="justify-content:space-between;">
-          <button type="button" class="btn btn-secondary" onclick="finishMfaSetup()" style="font-size:11px;">Skip / Done</button>
-          <button class="btn btn-secondary" onclick="toggleAuthModal(false)">Close</button>
         </div>
       </div>
 
     </div>
   </div>
+
 
   <!-- Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
@@ -1710,11 +1848,32 @@
     let mfaCountdownTimer = null;
     let activeMfaSecret = '';
 
+    function showAuthAlert(msg, isInfo = false) {
+      const alertBox = $('authGateAlert');
+      const infoBox = $('authGateInfo');
+      if (isInfo) {
+        if (alertBox) alertBox.style.display = 'none';
+        if (infoBox) {
+          infoBox.textContent = msg;
+          infoBox.style.display = 'block';
+        }
+      } else {
+        if (infoBox) infoBox.style.display = 'none';
+        if (alertBox) {
+          alertBox.textContent = msg;
+          alertBox.style.display = 'block';
+        }
+      }
+    }
+
+    function clearAuthAlert() {
+      if ($('authGateAlert')) $('authGateAlert').style.display = 'none';
+      if ($('authGateInfo')) $('authGateInfo').style.display = 'none';
+    }
+
     function toggleAuthModal(show) {
-      const modal = $('authModal');
-      if (!modal) return;
-      modal.style.display = show ? 'flex' : 'none';
-      if (show) {
+      // In Strict Gate mode, modal display toggles the in-app MFA setup view
+      if (!show) {
         resetToCredentialsView();
       }
     }
@@ -1723,6 +1882,7 @@
       if ($('authViewCredentials')) $('authViewCredentials').style.display = 'block';
       if ($('authViewMfaChallenge')) $('authViewMfaChallenge').style.display = 'none';
       if ($('authViewMfaSetup')) $('authViewMfaSetup').style.display = 'none';
+      clearAuthAlert();
       clearInterval(mfaCountdownTimer);
       clearOtpBoxes();
     }
@@ -1781,7 +1941,7 @@
             showMfaSetupView(res.mfa_setup);
             toast('Account registered! Scan your Google Authenticator QR Code.');
           } else {
-            toggleAuthModal(false);
+            unlockWorkspace();
             toast(`Registered & signed in as ${currentUser.email}`);
             await loadProfile();
             await loadConnections();
@@ -1802,7 +1962,7 @@
             localStorage.setItem('agent_team_token', authToken);
             currentUser = res.user;
             updateUserUI();
-            toggleAuthModal(false);
+            unlockWorkspace();
             toast(`Welcome back, ${currentUser.email}`);
             await loadProfile();
             await loadConnections();
@@ -1817,79 +1977,62 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Real-Time Google Identity Services & OAuth 2.0 Integration
+    // Real-Time Google OAuth 2.0 Web Redirection & Enterprise Configuration
     // ---------------------------------------------------------------------------
-    function saveGoogleClientId(val) {
-      if (val && val.trim()) {
-        localStorage.setItem('google_client_id', val.trim());
-        toast('Google Client ID updated for workspace.');
-      }
+    function toggleGoogleOAuthConfig() {
+      const box = $('googleOAuthConfigBox');
+      const label = $('btnGoogleCfgLabel');
+      if (!box) return;
+      const isOpen = box.style.display !== 'none';
+      box.style.display = isOpen ? 'none' : 'block';
+      if (label) label.textContent = isOpen ? 'Configure OAuth Client' : 'Close Setup';
     }
 
-    async function handleGoogleSignInClick() {
-      let clientId = localStorage.getItem('google_client_id') || '';
-      
-      // If GIS client library is loaded and client ID exists
-      if (window.google && google.accounts && clientId) {
-        google.accounts.id.initialize({
-          client_id: clientId,
-          callback: async (response) => {
-            await handleGoogleToken(response.credential);
-          }
-        });
-        google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            directGoogleOAuthPopup(clientId);
-          }
-        });
+    async function saveGoogleOAuthConfig() {
+      const cid = $('cfg_google_client_id')?.value.trim();
+      const csec = $('cfg_google_client_secret')?.value.trim();
+      const statusEl = $('cfgSaveStatus');
+      if (!cid) {
+        if (statusEl) statusEl.textContent = 'Client ID is required';
         return;
       }
-
-      // If no Google Client ID configured yet, prompt operator or allow pasting verification token
-      const input = prompt(
-        "Enter your Google Cloud OAuth 2.0 Client ID (or paste a verified Google ID Token for real-time validation):\n\n" +
-        "Tip: To get a Client ID, visit Google Cloud Console -> APIs & Services -> Credentials -> Create OAuth client ID (Web Application)."
-      );
-      if (!input || !input.trim()) return;
-
-      const trimmed = input.trim();
-      if (trimmed.length > 100 && trimmed.includes('.')) {
-        // User pasted an actual Google JWT ID Token directly
-        await handleGoogleToken(trimmed);
-      } else if (trimmed.includes('.apps.googleusercontent.com')) {
-        saveGoogleClientId(trimmed);
-        if ($('google_client_id_cfg')) $('google_client_id_cfg').value = trimmed;
-        directGoogleOAuthPopup(trimmed);
-      } else {
-        // Fallback email testing verification
-        try {
-          const res = await api('/api/auth/google', {
-            method: 'POST',
-            body: JSON.stringify({ email: trimmed, name: trimmed.split('@')[0] })
-          });
-          if (res.mfa_required) {
-            showMfaChallengeView(res);
-          } else {
-            authToken = res.access_token;
-            localStorage.setItem('agent_team_token', authToken);
-            currentUser = res.user;
-            updateUserUI();
-            toggleAuthModal(false);
-            toast('Google account verified & signed in.');
-            await loadProfile();
-            await loadConnections();
-          }
-        } catch (err) {
-          toast(err.message || 'Google authentication failed');
+      try {
+        if (statusEl) statusEl.textContent = 'Saving…';
+        await fetch(apiUrl('/api/auth/google/configure'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: cid, client_secret: csec })
+        });
+        localStorage.setItem('google_client_id', cid);
+        if (statusEl) {
+          statusEl.textContent = '✓ Saved! Ready for Google Sign-In';
+          statusEl.style.color = '#34d399';
+        }
+        toast('✓ Google OAuth credentials configured.');
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent = 'Failed to save';
+          statusEl.style.color = '#ef4444';
         }
       }
     }
 
-    function directGoogleOAuthPopup(clientId) {
-      const redirectUri = window.location.origin;
-      const scope = encodeURIComponent('openid email profile');
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=${scope}&nonce=${Date.now()}`;
-      window.open(authUrl, 'google_login_popup', 'width=520,height=620');
+    function initiateGoogleLogin() {
+      const btn = $('btnGoogleSignIn');
+      const btnText = $('btnGoogleSignInText');
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = 'Redirecting to Google…';
+      
+      // Standard OAuth 2.0 Web Redirection: Sends user directly to Google account chooser
+      const returnOrigin = window.location.origin;
+      window.location.href = apiUrl('/api/auth/google/login?redirect_origin=' + encodeURIComponent(returnOrigin));
+    }
+
+    function togglePasswordVisibility() {
+      const pwd = $('auth_password');
+      if (pwd) {
+        pwd.type = pwd.type === 'password' ? 'text' : 'password';
+      }
     }
 
     async function handleGoogleToken(credential) {
@@ -1905,7 +2048,7 @@
           localStorage.setItem('agent_team_token', authToken);
           currentUser = res.user;
           updateUserUI();
-          toggleAuthModal(false);
+          unlockWorkspace();
           toast(`Signed in with verified Google account: ${currentUser.email}`);
           await loadProfile();
           await loadConnections();
@@ -2018,7 +2161,7 @@
         localStorage.setItem('agent_team_token', authToken);
         currentUser = res.user;
         updateUserUI();
-        toggleAuthModal(false);
+        unlockWorkspace();
         toast(`🛡️ Two-Factor authentication verified! Welcome back.`);
         await loadProfile();
         await loadConnections();
@@ -2087,7 +2230,7 @@
           body: JSON.stringify({ secret: activeMfaSecret, code: code })
         });
         toast('✓ Google Authenticator Two-Factor Authentication is now active!');
-        toggleAuthModal(false);
+        unlockWorkspace();
         await checkCurrentUser();
       } catch (err) {
         toast(err.message || 'Verification failed. Make sure your device time is synchronized.');
@@ -2102,7 +2245,7 @@
     }
 
     function finishMfaSetup() {
-      toggleAuthModal(false);
+      unlockWorkspace();
       resetToCredentialsView();
     }
 
@@ -2112,8 +2255,16 @@
       currentUser = null;
       updateUserUI();
       toggleProfileDrawer(false);
+      if ($('appRoot')) $('appRoot').style.display = 'none';
+      if ($('authGate')) $('authGate').style.display = 'flex';
+      resetToCredentialsView();
       toast('Signed out of workspace.');
-      checkCurrentUser();
+    }
+
+    function unlockWorkspace() {
+      if ($('authGate')) $('authGate').style.display = 'none';
+      if ($('appRoot')) $('appRoot').style.display = 'block';
+      updateUserUI();
     }
 
     // ---------------------------------------------------------------------------
@@ -2711,14 +2862,60 @@
       }
     });
 
-    // Initial Load
+    // ---------------------------------------------------------------------------
+    // Initial Load & Strict Enterprise Gate Verification
+    // ---------------------------------------------------------------------------
     async function init() {
-      await getAuthToken();
-      await checkCurrentUser();
-      await loadProfile();
-      await loadUpcomingFestivals();
-      await loadConnections();
-      await loadHistory();
+      // 1. Process URL parameters from Google OAuth redirection or errors
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.has('token')) {
+        authToken = params.get('token');
+        localStorage.setItem('agent_team_token', authToken);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (params.has('mfa_required')) {
+        const challengeToken = params.get('challenge_token');
+        const email = params.get('email');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showMfaChallengeView({ challenge_token: challengeToken, email: email });
+        return;
+      } else if (params.has('auth_error')) {
+        const errorMsg = params.get('auth_error');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showAuthAlert(errorMsg);
+      } else if (params.has('google_oauth_setup')) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showAuthAlert('Google Cloud OAuth 2.0 Web Client is required. Enter your Google Client ID below to activate Google Sign-In.', true);
+        toggleGoogleOAuthConfig();
+      }
+
+      // 2. Strict Authentication Check: Home screen is ONLY unlocked if /api/auth/me succeeds
+      const token = localStorage.getItem('agent_team_token');
+      if (!token) {
+        // Unauthenticated: Keep appRoot strictly hidden, show Auth Gate
+        if ($('appRoot')) $('appRoot').style.display = 'none';
+        if ($('authGate')) $('authGate').style.display = 'flex';
+        return;
+      }
+
+      try {
+        authToken = token;
+        const user = await api('/api/auth/me');
+        currentUser = user;
+        unlockWorkspace();
+        await loadProfile();
+        await loadUpcomingFestivals();
+        await loadConnections();
+        await loadHistory();
+      } catch (err) {
+        // Token invalid or expired: Remove token, enforce Auth Gate
+        authToken = '';
+        localStorage.removeItem('agent_team_token');
+        currentUser = null;
+        if ($('appRoot')) $('appRoot').style.display = 'none';
+        if ($('authGate')) $('authGate').style.display = 'flex';
+        showAuthAlert('Your session has expired. Please sign in to continue.');
+      }
     }
     init();
   </script>

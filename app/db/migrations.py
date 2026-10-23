@@ -119,3 +119,10 @@ def run_migrations(db_path: str):
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )""")
+
+        # System settings for runtime secrets & OAuth client credentials
+        con.execute("""CREATE TABLE IF NOT EXISTS system_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )""")

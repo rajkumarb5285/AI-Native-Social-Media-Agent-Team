@@ -102,3 +102,41 @@ def test_mfa_flow_totp_and_otp(client):
     verify_data = good_verify.json()
     assert "access_token" in verify_data
     assert verify_data["user"]["email"] == "mfa.user@enterprise.com"
+
+    # 5. /api/auth/me returns authenticated profile
+    token = verify_data["access_token"]
+    me_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_res.status_code == 200
+    me_data = me_res.json()
+    assert me_data["email"] == "mfa.user@enterprise.com"
+    assert me_data["mfa_enabled"] is True
+
+def test_google_oauth_status_and_configuration(client):
+    # Check initial status
+    status_res = client.get("/api/auth/google/status")
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert "configured" in status_data
+    assert "redirect_uri" in status_data
+    assert "/api/auth/google/callback" in status_data["redirect_uri"]
+
+    # Configure Google Client ID
+    config_res = client.post("/api/auth/google/configure", json={
+        "client_id": "test-client-id.apps.googleusercontent.com",
+        "client_secret": "test-client-secret-123"
+    })
+    assert config_res.status_code == 200
+    assert config_res.json()["client_id"] == "test-client-id.apps.googleusercontent.com"
+
+    # Status reflects configured client ID
+    updated_status = client.get("/api/auth/google/status")
+    assert updated_status.json()["configured"] is True
+    assert updated_status.json()["client_id"] == "test-client-id.apps.googleusercontent.com"
+
+    # Login redirect points to accounts.google.com
+    login_redir = client.get("/api/auth/google/login?redirect_origin=http://localhost:3000", follow_redirects=False)
+    assert login_redir.status_code in (302, 307)
+    redir_loc = login_redir.headers["location"]
+    assert "accounts.google.com/o/oauth2/v2/auth" in redir_loc
+    assert "test-client-id.apps.googleusercontent.com" in redir_loc
+    assert "prompt=select_account" in redir_loc

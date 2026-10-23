@@ -1,10 +1,10 @@
-import os, json, sqlite3, uuid, datetime, asyncio, secrets
+import os, json, sqlite3, uuid, datetime, asyncio, secrets, urllib.parse
 from pathlib import Path
 from typing import Any, Optional
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -83,6 +83,10 @@ class AuthMfaDisableRequest(BaseModel):
 
 class AuthOtpSendRequest(BaseModel):
     challenge_token: str
+
+class GoogleOAuthConfigRequest(BaseModel):
+    client_id: str
+    client_secret: Optional[str] = ""
 
 class BusinessProfileModel(BaseModel):
     business_name: str = Field(min_length=1, max_length=120)
@@ -1057,6 +1061,233 @@ async def google_auth(req: AuthGoogleRequest):
 @app.post("/api/auth/google/verify")
 async def google_auth_verify(req: AuthGoogleRequest):
     return await google_auth(req)
+
+def get_system_setting(key: str, default: str = "") -> str:
+    env_val = os.getenv(key.upper(), "").strip()
+    if env_val:
+        return env_val
+    try:
+        with db() as con:
+            row = con.execute("SELECT value FROM system_settings WHERE key=?", (key,)).fetchone()
+            if row and row["value"]:
+                return str(row["value"]).strip()
+    except Exception:
+        pass
+    return default
+
+def set_system_setting(key: str, value: str):
+    with db() as con:
+        con.execute(
+            "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, value.strip(), now())
+        )
+
+def get_google_client_id() -> str:
+    return get_system_setting("google_client_id")
+
+def get_google_client_secret() -> str:
+    return get_system_setting("google_client_secret")
+
+@app.get("/api/auth/me")
+def get_current_user_profile(user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        row = con.execute("SELECT * FROM users WHERE id=?", (user.user_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "User record not found.")
+        u = dict(row)
+        return {
+            "id": u["id"],
+            "email": u["email"],
+            "role": u["role"],
+            "tenant_id": u["tenant_id"],
+            "full_name": u.get("full_name") or "",
+            "business_name": u.get("business_name") or "",
+            "mfa_enabled": bool(u.get("mfa_enabled", 0)),
+            "is_verified": bool(u.get("is_verified", 0))
+        }
+
+@app.get("/api/auth/google/status")
+def get_google_auth_status(request: Request):
+    client_id = get_google_client_id()
+    backend_base = os.getenv("API_BASE_URL", "").strip().rstrip("/")
+    if not backend_base:
+        backend_base = str(request.base_url).rstrip("/")
+    redirect_uri = f"{backend_base}/api/auth/google/callback"
+    return {
+        "configured": bool(client_id),
+        "client_id": client_id,
+        "redirect_uri": redirect_uri
+    }
+
+@app.post("/api/auth/google/configure")
+def configure_google_oauth(req: GoogleOAuthConfigRequest):
+    cid = req.client_id.strip()
+    csec = (req.client_secret or "").strip()
+    if not cid:
+        raise HTTPException(400, "Google Client ID is required.")
+    set_system_setting("google_client_id", cid)
+    if csec:
+        set_system_setting("google_client_secret", csec)
+    return {"status": "success", "message": "Google OAuth credentials updated.", "client_id": cid}
+
+@app.get("/api/auth/google/login")
+def google_oauth_login(request: Request, redirect_origin: Optional[str] = None):
+    """
+    Standard Google OAuth 2.0 Web Redirection.
+    Redirects the user directly to Google's official account selector screen.
+    """
+    client_id = get_google_client_id()
+    
+    # Determine return origin (e.g. Vercel domain, Render domain, or localhost)
+    referer = request.headers.get("referer", "").split("?")[0].rstrip("/")
+    origin = redirect_origin or referer
+    if not origin:
+        origin = str(request.base_url).rstrip("/")
+
+    if not client_id:
+        # Client ID not yet set: redirect to Auth Gate with setup prompt
+        return RedirectResponse(url=f"{origin}/?google_oauth_setup=required")
+
+    backend_base = os.getenv("API_BASE_URL", "").strip().rstrip("/")
+    if not backend_base:
+        backend_base = str(request.base_url).rstrip("/")
+    redirect_uri = f"{backend_base}/api/auth/google/callback"
+
+    state_payload = urllib.parse.quote(origin)
+    google_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        f"?client_id={urllib.parse.quote(client_id)}"
+        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
+        "&response_type=code"
+        "&scope=openid%20email%20profile"
+        "&access_type=offline"
+        "&prompt=select_account"
+        f"&state={state_payload}"
+    )
+    return RedirectResponse(url=google_url)
+
+@app.get("/api/auth/google/callback")
+async def google_oauth_callback(
+    request: Request,
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    state: Optional[str] = None
+):
+    target_origin = "/"
+    if state:
+        try:
+            target_origin = urllib.parse.unquote(state).rstrip("/")
+        except Exception:
+            target_origin = "/"
+
+    if error:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google authorization failed: {error}')}")
+
+    if not code:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('Missing Google authorization code')}")
+
+    client_id = get_google_client_id()
+    client_secret = get_google_client_secret()
+
+    backend_base = os.getenv("API_BASE_URL", "").strip().rstrip("/")
+    if not backend_base:
+        backend_base = str(request.base_url).rstrip("/")
+    redirect_uri = f"{backend_base}/api/auth/google/callback"
+
+    email = None
+    name = None
+    google_sub = None
+    picture = ""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
+            token_resp = await http_client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code"
+                }
+            )
+            if token_resp.status_code != 200:
+                err_text = token_resp.text
+                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Failed to exchange authorization code with Google ({token_resp.status_code})')}")
+
+            token_data = token_resp.json()
+            id_token_val = token_data.get("id_token")
+            access_token_val = token_data.get("access_token")
+
+            if access_token_val:
+                userinfo_resp = await http_client.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {access_token_val}"}
+                )
+                if userinfo_resp.status_code == 200:
+                    info = userinfo_resp.json()
+                    email = info.get("email", "").lower().strip()
+                    name = info.get("name", "")
+                    google_sub = info.get("sub", "")
+                    picture = info.get("picture", "")
+
+            if not email and id_token_val:
+                prof = await verify_google_id_token(id_token_val)
+                email = prof["email"]
+                name = prof["name"]
+                google_sub = prof["sub"]
+                picture = prof.get("picture", "")
+
+            if not email:
+                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('Google account has no verified email address')}")
+
+    except Exception as e:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google verification error: {str(e)}')}")
+
+    with db() as con:
+        user_row = con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        if not user_row:
+            user_id = f"usr_g_{uuid.uuid4().hex[:10]}"
+            pwd_hash = hash_password(secrets.token_urlsafe(32))
+            tenant_id = f"tenant_{uuid.uuid4().hex[:8]}"
+            con.execute(
+                """INSERT INTO users (id, created_at, updated_at, email, password_hash, role, tenant_id, is_active, google_id, full_name, is_verified)
+                   VALUES (?, ?, ?, ?, ?, 'editor', ?, 1, ?, ?, 1)""",
+                (user_id, now(), now(), email, pwd_hash, tenant_id, google_sub, name)
+            )
+            con.execute("""
+                INSERT OR IGNORE INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, updated_at)
+                VALUES (?, ?, 'Verified Google Account', '', '', '', 'Empowering Business with Smart AI Marketing', '5.0 ★★★★★', '100+ Google Reviews', ?)
+            """, (tenant_id, f"{name or 'Google'}'s Business", now()))
+            user_dict = {"id": user_id, "email": email, "role": "editor", "tenant_id": tenant_id, "mfa_enabled": 0}
+        else:
+            user_dict = dict(user_row)
+            if google_sub and not user_dict.get("google_id"):
+                con.execute("UPDATE users SET google_id=?, is_verified=1 WHERE id=?", (google_sub, user_dict["id"]))
+
+    if bool(user_dict.get("mfa_enabled", 0)):
+        challenge_token = create_mfa_challenge_token(user_dict["id"], email, user_dict["role"], user_dict["tenant_id"])
+        otp_code = generate_numeric_otp(6)
+        otp_id = f"otp_{uuid.uuid4().hex[:10]}"
+        expires_at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)).isoformat()
+        with db() as con:
+            con.execute(
+                """INSERT INTO otp_codes (id, user_id, challenge_token, otp_code, purpose, expires_at, used, created_at)
+                   VALUES (?, ?, ?, ?, 'mfa_login', ?, 0, ?)""",
+                (otp_id, user_dict["id"], challenge_token, otp_code, expires_at, now())
+            )
+        print(f"[SECURITY AUTH] Real-Time MFA OTP for Google User {email}: {otp_code}")
+        return RedirectResponse(url=f"{target_origin}/?mfa_required=true&challenge_token={urllib.parse.quote(challenge_token)}&email={urllib.parse.quote(email)}")
+
+    auth_user = AuthenticatedUser(
+        user_id=user_dict["id"],
+        email=user_dict["email"],
+        role=user_dict["role"],
+        tenant_id=user_dict["tenant_id"]
+    )
+    jwt_token = create_jwt(auth_user)
+    return RedirectResponse(url=f"{target_origin}/?token={urllib.parse.quote(jwt_token)}")
 
 @app.post("/api/auth/quick-access")
 def quick_access_auth():
