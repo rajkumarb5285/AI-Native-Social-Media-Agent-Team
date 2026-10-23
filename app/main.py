@@ -125,13 +125,16 @@ def db():
     con.row_factory = sqlite3.Row
     return con
 
-from fastapi import Depends
+from fastapi import Depends, Response
+from fastapi.responses import JSONResponse
 from app.db.migrations import run_migrations
 from app.security.auth import (
     get_current_user, require_role, AuthenticatedUser, create_jwt, hash_password, verify_password,
     validate_password_strength, create_mfa_challenge_token, verify_mfa_challenge_token,
     generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp_code,
-    generate_numeric_otp, verify_google_id_token
+    generate_numeric_otp, verify_google_id_token, generate_pkce_pair, generate_oauth_state,
+    generate_nonce, is_safe_redirect_url, create_db_session, get_session_user, destroy_db_session,
+    rotate_db_session, SESSION_COOKIE_NAME
 )
 from app.security.audit import AuditLogger
 from app.security.rbac import Role
@@ -1085,28 +1088,11 @@ def set_system_setting(key: str, value: str):
         )
 
 def get_google_client_id() -> str:
-    return get_system_setting("google_client_id")
+    return os.getenv("GOOGLE_CLIENT_ID", "").strip() or get_system_setting("google_client_id")
 
 def get_google_client_secret() -> str:
-    return get_system_setting("google_client_secret")
+    return os.getenv("GOOGLE_CLIENT_SECRET", "").strip() or get_system_setting("google_client_secret")
 
-@app.get("/api/auth/me")
-def get_current_user_profile(user: AuthenticatedUser = Depends(get_current_user)):
-    with db() as con:
-        row = con.execute("SELECT * FROM users WHERE id=?", (user.user_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, "User record not found.")
-        u = dict(row)
-        return {
-            "id": u["id"],
-            "email": u["email"],
-            "role": u["role"],
-            "tenant_id": u["tenant_id"],
-            "full_name": u.get("full_name") or "",
-            "business_name": u.get("business_name") or "",
-            "mfa_enabled": bool(u.get("mfa_enabled", 0)),
-            "is_verified": bool(u.get("is_verified", 0))
-        }
 
 @app.get("/api/auth/google/status")
 def get_google_auth_status(request: Request):
@@ -1132,42 +1118,62 @@ def configure_google_oauth(req: GoogleOAuthConfigRequest):
         set_system_setting("google_client_secret", csec)
     return {"status": "success", "message": "Google OAuth credentials updated.", "client_id": cid}
 
+@app.get("/auth/google/login")
 @app.get("/api/auth/google/login")
 def google_oauth_login(request: Request, redirect_origin: Optional[str] = None):
     """
-    Standard Google OAuth 2.0 Web Redirection.
-    Redirects the user directly to Google's official account selector screen.
+    Standard Google OAuth 2.0 / OpenID Connect Authorization Code Flow with PKCE (RFC 7636).
+    1. Generates cryptographic state, nonce, and PKCE code_verifier.
+    2. Stores state in DB with 10 min TTL.
+    3. Redirects to https://accounts.google.com/o/oauth2/v2/auth.
     """
+    check_rate_limit(request, "auth_google_login", limit=30, window_seconds=60)
     client_id = get_google_client_id()
-    
-    # Determine return origin (e.g. Vercel domain, Render domain, or localhost)
+
+    # Determine return origin
     referer = request.headers.get("referer", "").split("?")[0].rstrip("/")
     origin = redirect_origin or referer
-    if not origin:
+    if not origin or not is_safe_redirect_url(origin):
         origin = str(request.base_url).rstrip("/")
 
     if not client_id:
-        # Client ID not yet set: redirect to Auth Gate with setup prompt
         return RedirectResponse(url=f"{origin}/?google_oauth_setup=required")
 
     backend_base = os.getenv("API_BASE_URL", "").strip().rstrip("/")
     if not backend_base:
         backend_base = str(request.base_url).rstrip("/")
-    redirect_uri = f"{backend_base}/api/auth/google/callback"
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "").strip() or f"{backend_base}/auth/google/callback"
 
-    state_payload = urllib.parse.quote(origin)
-    google_url = (
+    state = generate_oauth_state()
+    nonce = generate_nonce()
+    code_verifier, code_challenge = generate_pkce_pair()
+
+    # Store in oauth_states table (10 minute TTL)
+    now_dt = datetime.datetime.now(datetime.timezone.utc)
+    expires_dt = now_dt + datetime.timedelta(minutes=10)
+    with db() as con:
+        con.execute(
+            """INSERT INTO oauth_states (state, nonce, code_verifier, redirect_url, expires_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (state, nonce, code_verifier, origin, expires_dt.isoformat(), now_dt.isoformat())
+        )
+
+    google_auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
         f"?client_id={urllib.parse.quote(client_id)}"
         f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
         "&response_type=code"
         "&scope=openid%20email%20profile"
+        f"&code_challenge={urllib.parse.quote(code_challenge)}"
+        "&code_challenge_method=S256"
+        f"&state={urllib.parse.quote(state)}"
+        f"&nonce={urllib.parse.quote(nonce)}"
         "&access_type=offline"
         "&prompt=select_account"
-        f"&state={state_payload}"
     )
-    return RedirectResponse(url=google_url)
+    return RedirectResponse(url=google_auth_url, status_code=302)
 
+@app.get("/auth/google/callback")
 @app.get("/api/auth/google/callback")
 async def google_oauth_callback(
     request: Request,
@@ -1175,18 +1181,43 @@ async def google_oauth_callback(
     error: Optional[str] = None,
     state: Optional[str] = None
 ):
-    target_origin = "/"
-    if state:
-        try:
-            target_origin = urllib.parse.unquote(state).rstrip("/")
-        except Exception:
-            target_origin = "/"
+    """
+    Handles Google OAuth 2.0 / OIDC callback with PKCE.
+    1. Validates state & extracts stored code_verifier and nonce.
+    2. Exchanges code for tokens at https://oauth2.googleapis.com/token.
+    3. Validates ID token signature, issuer, audience, nonce, expiration, email_verified.
+    4. Looks up user by google_sub (Google's permanent user ID).
+    5. Creates or links user account safely.
+    6. Enforces strict MFA if user enabled it.
+    7. Issues session cookie + rotates session ID + returns redirect.
+    """
+    check_rate_limit(request, "auth_google_callback", limit=30, window_seconds=60)
+
+    if not state:
+        raise HTTPException(status_code=400, detail="Missing OAuth state parameter.")
+
+    # Retrieve and consume oauth_state
+    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with db() as con:
+        state_row = con.execute("SELECT * FROM oauth_states WHERE state = ?", (state,)).fetchone()
+        con.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
+
+    if not state_row:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state parameter.")
+
+    stored_state = dict(state_row)
+    target_origin = stored_state.get("redirect_url") or "/"
+    if not is_safe_redirect_url(target_origin):
+        target_origin = "/"
+
+    if stored_state.get("expires_at", "") < now_str:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('OAuth session expired. Please sign in again.')}", status_code=303)
 
     if error:
-        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google authorization failed: {error}')}")
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google sign-in was cancelled or failed: {error}')}", status_code=303)
 
     if not code:
-        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('Missing Google authorization code')}")
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('Missing Google authorization code.')}", status_code=303)
 
     client_id = get_google_client_id()
     client_secret = get_google_client_secret()
@@ -1194,13 +1225,9 @@ async def google_oauth_callback(
     backend_base = os.getenv("API_BASE_URL", "").strip().rstrip("/")
     if not backend_base:
         backend_base = str(request.base_url).rstrip("/")
-    redirect_uri = f"{backend_base}/api/auth/google/callback"
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "").strip() or f"{backend_base}/auth/google/callback"
 
-    email = None
-    name = None
-    google_sub = None
-    picture = ""
-
+    # Exchange code for tokens using PKCE code_verifier
     try:
         async with httpx.AsyncClient(timeout=15.0) as http_client:
             token_resp = await http_client.post(
@@ -1210,76 +1237,93 @@ async def google_oauth_callback(
                     "client_id": client_id,
                     "client_secret": client_secret,
                     "redirect_uri": redirect_uri,
-                    "grant_type": "authorization_code"
+                    "grant_type": "authorization_code",
+                    "code_verifier": stored_state["code_verifier"]
                 }
             )
             if token_resp.status_code != 200:
                 err_text = token_resp.text
-                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Failed to exchange authorization code with Google ({token_resp.status_code})')}")
+                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google token exchange failed ({token_resp.status_code})')}", status_code=303)
 
             token_data = token_resp.json()
             id_token_val = token_data.get("id_token")
-            access_token_val = token_data.get("access_token")
+            if not id_token_val:
+                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('No ID token returned by Google.')}", status_code=303)
 
-            if access_token_val:
-                userinfo_resp = await http_client.get(
-                    "https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {access_token_val}"}
-                )
-                if userinfo_resp.status_code == 200:
-                    info = userinfo_resp.json()
-                    email = info.get("email", "").lower().strip()
-                    name = info.get("name", "")
-                    google_sub = info.get("sub", "")
-                    picture = info.get("picture", "")
-
-            if not email and id_token_val:
-                prof = await verify_google_id_token(id_token_val)
-                email = prof["email"]
-                name = prof["name"]
-                google_sub = prof["sub"]
-                picture = prof.get("picture", "")
-
-            if not email:
-                return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote('Google account has no verified email address')}")
-
-    except Exception as e:
-        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Google verification error: {str(e)}')}")
-
-    with db() as con:
-        user_row = con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        if not user_row:
-            user_id = f"usr_g_{uuid.uuid4().hex[:10]}"
-            pwd_hash = hash_password(secrets.token_urlsafe(32))
-            tenant_id = f"tenant_{uuid.uuid4().hex[:8]}"
-            con.execute(
-                """INSERT INTO users (id, created_at, updated_at, email, password_hash, role, tenant_id, is_active, google_id, full_name, is_verified)
-                   VALUES (?, ?, ?, ?, ?, 'editor', ?, 1, ?, ?, 1)""",
-                (user_id, now(), now(), email, pwd_hash, tenant_id, google_sub, name)
+            # Validate ID token with strict nonce & audience checks
+            token_claims = await verify_google_id_token(
+                id_token_val,
+                expected_nonce=stored_state["nonce"],
+                expected_audience=client_id
             )
-            con.execute("""
-                INSERT OR IGNORE INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, updated_at)
-                VALUES (?, ?, 'Verified Google Account', '', '', '', 'Empowering Business with Smart AI Marketing', '5.0 ★★★★★', '100+ Google Reviews', ?)
-            """, (tenant_id, f"{name or 'Google'}'s Business", now()))
-            user_dict = {"id": user_id, "email": email, "role": "editor", "tenant_id": tenant_id, "mfa_enabled": 0}
-        else:
-            user_dict = dict(user_row)
-            if google_sub and not user_dict.get("google_id"):
-                con.execute("UPDATE users SET google_id=?, is_verified=1 WHERE id=?", (google_sub, user_dict["id"]))
 
+    except HTTPException as he:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(he.detail)}", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"{target_origin}/?auth_error={urllib.parse.quote(f'Authentication error: {str(e)}')}", status_code=303)
+
+    email = token_claims["email"]
+    name = token_claims.get("name") or email.split("@")[0]
+    google_sub = token_claims["sub"]
+    picture = token_claims.get("picture", "")
+
+    # Look up user by Google "sub" (stable unique ID), NOT by email
+    with db() as con:
+        user_row = con.execute("SELECT * FROM users WHERE google_sub = ?", (google_sub,)).fetchone()
+
+        if user_row:
+            user_dict = dict(user_row)
+            # Update last login & picture
+            con.execute(
+                "UPDATE users SET last_login_at = ?, avatar_url = ?, updated_at = ? WHERE id = ?",
+                (now(), picture or user_dict.get("avatar_url"), now(), user_dict["id"])
+            )
+        else:
+            # Check if an existing account with the same email exists
+            existing_email_row = con.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+            if existing_email_row:
+                user_dict = dict(existing_email_row)
+                # Link safely because Google email_verified == True
+                con.execute(
+                    """UPDATE users 
+                       SET google_sub = ?, google_id = ?, avatar_url = ?, is_verified = 1, email_verified = 1, last_login_at = ?, updated_at = ? 
+                       WHERE id = ?""",
+                    (google_sub, google_sub, picture or user_dict.get("avatar_url"), now(), now(), user_dict["id"])
+                )
+            else:
+                # Create brand new user
+                user_id = f"usr_g_{uuid.uuid4().hex[:10]}"
+                pwd_hash = hash_password(secrets.token_urlsafe(32))
+                tenant_id = f"tenant_{uuid.uuid4().hex[:8]}"
+                con.execute(
+                    """INSERT INTO users (id, created_at, updated_at, email, password_hash, role, tenant_id, is_active, 
+                                          google_sub, google_id, name, full_name, avatar_url, is_verified, email_verified, last_login_at)
+                       VALUES (?, ?, ?, ?, ?, 'editor', ?, 1, ?, ?, ?, ?, ?, 1, 1, ?)""",
+                    (user_id, now(), now(), email, pwd_hash, tenant_id, google_sub, google_sub, name, name, picture, now())
+                )
+                # Create personal workspace
+                con.execute("""
+                    INSERT OR IGNORE INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, updated_at)
+                    VALUES (?, ?, 'Verified Google Account', '', '', '', 'Empowering Business with Smart AI Marketing', '5.0 ★★★★★', '100+ Google Reviews', ?)
+                """, (tenant_id, f"{name}'s Business", now()))
+                user_dict = {
+                    "id": user_id, "email": email, "role": "editor", "tenant_id": tenant_id,
+                    "mfa_enabled": 0, "name": name, "avatar_url": picture
+                }
+
+    # Strict MFA Check
     if bool(user_dict.get("mfa_enabled", 0)):
         challenge_token = create_mfa_challenge_token(user_dict["id"], email, user_dict["role"], user_dict["tenant_id"])
-        otp_code = generate_numeric_otp(6)
-        otp_id = f"otp_{uuid.uuid4().hex[:10]}"
-        expires_at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)).isoformat()
-        with db() as con:
-            con.execute(
-                """INSERT INTO otp_codes (id, user_id, challenge_token, otp_code, purpose, expires_at, used, created_at)
-                   VALUES (?, ?, ?, ?, 'mfa_login', ?, 0, ?)""",
-                (otp_id, user_dict["id"], challenge_token, otp_code, expires_at, now())
-            )
-        print(f"[SECURITY AUTH] Real-Time MFA OTP for Google User {email}: {otp_code}")
-        return RedirectResponse(url=f"{target_origin}/?mfa_required=true&challenge_token={urllib.parse.quote(challenge_token)}&email={urllib.parse.quote(email)}")
+        audit_logger.log(user_dict["tenant_id"], user_dict["id"], "auth.google.mfa_challenge", user_dict["id"], {"email": email})
+        return RedirectResponse(
+            url=f"{target_origin}/?mfa_required=true&challenge_token={urllib.parse.quote(challenge_token)}&email={urllib.parse.quote(email)}"
+        )
+
+    # Rotate / Create server-side session
+    client_ip = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent", "")
+    old_session = request.cookies.get(SESSION_COOKIE_NAME, "")
+    session_id = rotate_db_session(DB_PATH, old_session, user_dict["id"], user_agent, client_ip)
 
     auth_user = AuthenticatedUser(
         user_id=user_dict["id"],
@@ -1288,7 +1332,29 @@ async def google_oauth_callback(
         tenant_id=user_dict["tenant_id"]
     )
     jwt_token = create_jwt(auth_user)
-    return RedirectResponse(url=f"{target_origin}/?token={urllib.parse.quote(jwt_token)}")
+
+    # Log successful login (no tokens logged)
+    audit_logger.log(user_dict["tenant_id"], user_dict["id"], "auth.google.login_success", user_dict["id"], {"email": email, "auth_method": "google_oidc_pkce"})
+
+    is_secure = os.getenv("ENVIRONMENT", "development").lower() not in ("development", "test")
+    response = RedirectResponse(url=f"{target_origin}/?auth_success=true&token={urllib.parse.quote(jwt_token)}", status_code=303)
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,
+        samesite="lax",
+        secure=is_secure,
+        max_age=86400 * 7
+    )
+    response.set_cookie(
+        key="agent_team_token",
+        value=jwt_token,
+        httponly=False,
+        samesite="lax",
+        secure=is_secure,
+        max_age=86400 * 7
+    )
+    return response
 
 @app.post("/api/auth/quick-access")
 def quick_access_auth():
@@ -1313,28 +1379,73 @@ def quick_access_auth():
         "user": {"id": auth_user.user_id, "email": auth_user.email, "role": auth_user.role, "tenant_id": auth_user.tenant_id}
     }
 
+@app.get("/auth/me")
 @app.get("/api/auth/me")
 def get_me(user: AuthenticatedUser = Depends(get_current_user)):
     with db() as con:
-        row = con.execute("SELECT email, role, tenant_id, mfa_enabled, business_name, full_name, is_verified FROM users WHERE id=?", (user.user_id,)).fetchone()
+        row = con.execute(
+            """SELECT id, email, role, tenant_id, mfa_enabled, business_name, full_name, name, avatar_url, 
+                      is_verified, email_verified, created_at, last_login_at 
+               FROM users WHERE id = ?""",
+            (user.user_id,)
+        ).fetchone()
         if row:
             d = dict(row)
             return {
                 "id": user.user_id,
                 "email": d["email"],
+                "name": d.get("name") or d.get("full_name") or d["email"].split("@")[0],
+                "avatar_url": d.get("avatar_url") or "",
                 "role": d["role"],
                 "tenant_id": d["tenant_id"],
                 "mfa_enabled": bool(d.get("mfa_enabled", 0)),
                 "business_name": d.get("business_name", ""),
                 "full_name": d.get("full_name", ""),
-                "is_verified": bool(d.get("is_verified", 0))
+                "is_verified": bool(d.get("is_verified", 0)),
+                "email_verified": bool(d.get("email_verified", 0)),
+                "created_at": d.get("created_at"),
+                "last_login_at": d.get("last_login_at")
             }
+    raise HTTPException(status_code=401, detail="User account not found or has been deactivated.")
+
+@app.post("/auth/logout")
+@app.post("/api/auth/logout")
+def logout(request: Request):
+    """Destroys current session and clears authentication cookies."""
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_id:
+        destroy_db_session(DB_PATH, session_id)
+    response = JSONResponse(content={"status": "ok", "message": "Signed out successfully."})
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    response.delete_cookie("agent_team_token")
+    return response
+
+@app.delete("/auth/me")
+@app.delete("/api/auth/me")
+def delete_account(request: Request, user: AuthenticatedUser = Depends(get_current_user)):
+    """Deletes user account, sessions, and associated business profile data."""
+    with db() as con:
+        con.execute("DELETE FROM sessions WHERE user_id = ?", (user.user_id,))
+        con.execute("DELETE FROM users WHERE id = ?", (user.user_id,))
+        con.execute("DELETE FROM business_profiles WHERE tenant_id = ?", (user.tenant_id,))
+    response = JSONResponse(content={"status": "ok", "message": "Account deleted successfully."})
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    response.delete_cookie("agent_team_token")
+    return response
+
+@app.get("/auth/export")
+@app.get("/api/auth/export")
+def export_user_data(user: AuthenticatedUser = Depends(get_current_user)):
+    """Exports personal data in compliance with data privacy regulations."""
+    with db() as con:
+        user_row = con.execute("SELECT id, email, role, tenant_id, created_at, last_login_at FROM users WHERE id = ?", (user.user_id,)).fetchone()
+        profile_row = con.execute("SELECT * FROM business_profiles WHERE tenant_id = ?", (user.tenant_id,)).fetchone()
+        runs = [dict(r) for r in con.execute("SELECT id, created_at, status, request_json FROM runs WHERE tenant_id = ?", (user.tenant_id,)).fetchall()]
     return {
-        "id": user.user_id,
-        "email": user.email,
-        "role": user.role,
-        "tenant_id": user.tenant_id,
-        "mfa_enabled": False
+        "user": dict(user_row) if user_row else {},
+        "business_profile": dict(profile_row) if profile_row else {},
+        "runs": runs,
+        "exported_at": now()
     }
 
 @app.post("/api/connections/{connection_id}/verify")

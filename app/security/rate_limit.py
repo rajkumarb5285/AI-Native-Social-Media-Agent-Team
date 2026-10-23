@@ -22,8 +22,9 @@ class InMemoryRateLimiter:
 
 rate_limiter = InMemoryRateLimiter(requests_per_minute=120)
 
-async def check_rate_limit(request: Request):
+def check_rate_limit(request: Request, key: str = "", limit: int = 60, window_seconds: int = 60):
     client_ip = request.client.host if request.client else "127.0.0.1"
     tenant_header = request.headers.get("x-tenant-id", client_ip)
-    if not rate_limiter.is_allowed(tenant_header):
+    lookup_key = f"{tenant_header}:{key}" if key else tenant_header
+    if not rate_limiter.is_allowed(lookup_key):
         raise HTTPException(429, "Too Many Requests: Rate limit exceeded. Try again in 60 seconds.")

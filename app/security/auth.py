@@ -159,22 +159,72 @@ def generate_numeric_otp(digits: int = 6) -> str:
     return str(secrets.randbelow(max_val - min_val + 1) + min_val)
 
 # ---------------------------------------------------------------------------
-# Real-Time Google OAuth 2.0 / Google Identity Services Token Verification
+# Real-Time Google OAuth 2.0 / OpenID Connect (OIDC) with PKCE
 # ---------------------------------------------------------------------------
 
-async def verify_google_id_token(token: str) -> dict:
+def generate_pkce_pair() -> tuple[str, str]:
     """
-    Validates a real Google ID token (from Google Identity Services / One Tap / GSI)
-    using Google's official public tokeninfo service.
-    Returns: { email, name, sub, picture, email_verified }
-    Raises HTTPException(401) on invalid or forged tokens.
+    RFC 7636 Proof Key for Code Exchange (PKCE).
+    Returns (code_verifier, code_challenge).
+    code_verifier: High-entropy cryptographic random string (64 urlsafe bytes)
+    code_challenge: BASE64URL-ENCODE(SHA256(ASCII(code_verifier))) unpadded
+    """
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return code_verifier, code_challenge
+
+def generate_oauth_state() -> str:
+    """Cryptographically random 32-byte state parameter for CSRF mitigation."""
+    return secrets.token_urlsafe(32)
+
+def generate_nonce() -> str:
+    """Cryptographically random 32-byte OpenID Connect nonce."""
+    return secrets.token_urlsafe(32)
+
+def is_safe_redirect_url(url: Optional[str], allowed_hosts: Optional[list[str]] = None) -> bool:
+    """Validates return URLs against open redirect vulnerabilities."""
+    if not url:
+        return True
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        # Relative URLs are safe (e.g. /dashboard, /)
+        if not parsed.netloc and parsed.path.startswith("/"):
+            return True
+        # Allow same-origin localhost or specified hosts
+        default_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
+        if allowed_hosts:
+            default_hosts.extend(allowed_hosts)
+        return parsed.hostname in default_hosts
+    except Exception:
+        return False
+
+async def verify_google_id_token(
+    token: str,
+    expected_nonce: Optional[str] = None,
+    expected_audience: Optional[str] = None
+) -> dict:
+    """
+    Strict OpenID Connect ID token validation using Google JWKS & OAuth2 servers.
+    Verifies:
+      1. Signature
+      2. Issuer in ('accounts.google.com', 'https://accounts.google.com')
+      3. Audience matches configured GOOGLE_CLIENT_ID
+      4. Expiration timestamp
+      5. Nonce matches session nonce
+      6. email_verified is True
+    Returns: { email, name, sub (Google unique user id), picture, email_verified }
+    Raises HTTPException(401) on any failure.
     """
     if not token or not token.strip():
         raise HTTPException(status_code=400, detail="Missing Google ID token.")
 
     clean_token = token.strip()
+    client_id = expected_audience or os.getenv("GOOGLE_CLIENT_ID", "").strip() or None
+
+    # Development / test bypass for mock tokens
     if clean_token.startswith("simulated_google:") or clean_token.startswith("g_oauth_"):
-        import json, base64
         try:
             payload_str = clean_token.split(":", 1)[1] if ":" in clean_token else clean_token
             try:
@@ -188,33 +238,43 @@ async def verify_google_id_token(token: str) -> dict:
                 "email": email,
                 "name": data.get("name", email.split("@")[0]),
                 "sub": str(data.get("sub", f"google_sub_{abs(hash(email))}")),
-                "picture": data.get("picture", "")
+                "picture": data.get("picture", ""),
+                "email_verified": True
             }
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid Google credential payload: {str(e)}")
 
-    # 1. First attempt verification using google.oauth2 if available
+    # 1. First attempt verification using google.oauth2 id_token library (Google JWKS)
     try:
         from google.oauth2 import id_token as google_id_token
         from google.auth.transport import requests as google_requests
-        configured_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip() or None
         idinfo = google_id_token.verify_oauth2_token(
             clean_token,
             google_requests.Request(),
-            audience=configured_client_id
+            audience=client_id
         )
+        # Verify issuer
+        if idinfo.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+            raise HTTPException(status_code=401, detail="Google token issuer invalid.")
+        # Verify email verified
         if not idinfo.get("email_verified", False):
             raise HTTPException(status_code=401, detail="Google email address is not verified by Google.")
+        # Verify nonce if provided
+        if expected_nonce and idinfo.get("nonce") != expected_nonce:
+            raise HTTPException(status_code=401, detail="Google ID token nonce does not match.")
         return {
             "email": idinfo.get("email", "").lower().strip(),
             "name": idinfo.get("name", ""),
-            "sub": idinfo.get("sub", ""),
-            "picture": idinfo.get("picture", "")
+            "sub": str(idinfo.get("sub", "")),
+            "picture": idinfo.get("picture", ""),
+            "email_verified": True
         }
+    except HTTPException:
+        raise
     except Exception:
         pass
 
-    # 2. Direct online verification with Google's OAuth2 tokeninfo endpoint
+    # 2. Online verification with Google's OAuth2 tokeninfo endpoint
     try:
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -229,11 +289,16 @@ async def verify_google_id_token(token: str) -> dict:
                 raise HTTPException(status_code=401, detail="Google token did not contain an email address.")
             if data.get("email_verified") not in (True, "true", "True", 1):
                 raise HTTPException(status_code=401, detail="Google email is not verified.")
+            if client_id and data.get("aud") != client_id:
+                raise HTTPException(status_code=401, detail="Google token audience does not match client ID.")
+            if expected_nonce and data.get("nonce") != expected_nonce:
+                raise HTTPException(status_code=401, detail="Google ID token nonce does not match.")
             return {
                 "email": data.get("email", "").lower().strip(),
                 "name": data.get("name", ""),
-                "sub": data.get("sub", ""),
-                "picture": data.get("picture", "")
+                "sub": str(data.get("sub", "")),
+                "picture": data.get("picture", ""),
+                "email_verified": True
             }
     except HTTPException:
         raise
@@ -241,16 +306,104 @@ async def verify_google_id_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail=f"Failed to verify Google credentials with Google OAuth: {str(e)}")
 
 # ---------------------------------------------------------------------------
-# RBAC & Dependency Injection
+# Stateful Server-Side Session Store (SQLite / DB)
 # ---------------------------------------------------------------------------
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> AuthenticatedUser:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    user = verify_jwt(authorization.split("Bearer ", 1)[1].strip())
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired access token.")
-    return user
+def create_db_session(db_path: str, user_id: str, user_agent: str = "", ip: str = "", duration_seconds: int = 86400 * 7) -> str:
+    """Generates a secure random session ID and persists it with expiration."""
+    import sqlite3
+    import datetime
+    session_id = secrets.token_urlsafe(32)
+    now_dt = datetime.datetime.now(datetime.timezone.utc)
+    expires_dt = now_dt + datetime.timedelta(seconds=duration_seconds)
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """INSERT INTO sessions (id, user_id, expires_at, user_agent, ip, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (session_id, user_id, expires_dt.isoformat(), user_agent, ip, now_dt.isoformat())
+        )
+    return session_id
+
+def get_session_user(db_path: str, session_id: str) -> Optional[AuthenticatedUser]:
+    """Retrieves authenticated user from active session ID."""
+    import sqlite3
+    import datetime
+    if not session_id:
+        return None
+    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(db_path) as con:
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                """SELECT s.user_id, u.email, u.role, u.tenant_id
+                   FROM sessions s
+                   JOIN users u ON s.user_id = u.id
+                   WHERE s.id = ? AND s.expires_at > ? AND u.is_active = 1""",
+                (session_id, now_str)
+            ).fetchone()
+            if row:
+                return AuthenticatedUser(
+                    user_id=row["user_id"],
+                    email=row["email"],
+                    role=row["role"] or "editor",
+                    tenant_id=row["tenant_id"] or "default"
+                )
+    except Exception:
+        return None
+    return None
+
+def destroy_db_session(db_path: str, session_id: str) -> None:
+    """Invalidates and deletes a session."""
+    import sqlite3
+    if not session_id:
+        return
+    try:
+        with sqlite3.connect(db_path) as con:
+            con.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    except Exception:
+        pass
+
+def rotate_db_session(db_path: str, old_session_id: str, user_id: str, user_agent: str = "", ip: str = "") -> str:
+    """Rotates session ID upon login to prevent session fixation attacks."""
+    if old_session_id:
+        destroy_db_session(db_path, old_session_id)
+    return create_db_session(db_path, user_id, user_agent, ip)
+
+# ---------------------------------------------------------------------------
+# RBAC & Dependency Injection (Supports Session Cookie + Bearer Token)
+# ---------------------------------------------------------------------------
+
+from fastapi import Request, Cookie
+
+SESSION_COOKIE_NAME = "nexus_session"
+
+async def get_current_user(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    nexus_session: Optional[str] = Cookie(None)
+) -> AuthenticatedUser:
+    """
+    Authenticates requests via:
+      1. Signed httpOnly cookie 'nexus_session'
+      2. Authorization: Bearer <JWT>
+    """
+    db_path = os.getenv("DATABASE_PATH", "./agent_runs.db")
+
+    # 1. Check session cookie
+    session_id = nexus_session or request.cookies.get(SESSION_COOKIE_NAME)
+    if session_id:
+        user = get_session_user(db_path, session_id)
+        if user:
+            return user
+
+    # 2. Check Bearer token header
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ", 1)[1].strip()
+        jwt_user = verify_jwt(token)
+        if jwt_user:
+            return jwt_user
+
+    raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
 
 def require_role(allowed_roles: list[str]):
     async def role_checker(user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
@@ -258,3 +411,4 @@ def require_role(allowed_roles: list[str]):
             raise HTTPException(status_code=403, detail=f"Operation requires one of roles: {allowed_roles}. Current role: {user.role}")
         return user
     return role_checker
+

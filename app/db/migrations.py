@@ -45,9 +45,14 @@ def run_migrations(db_path: str):
           mfa_secret TEXT,
           mfa_backup_codes TEXT,
           google_id TEXT,
+          google_sub TEXT UNIQUE,
+          name TEXT,
           full_name TEXT,
+          avatar_url TEXT,
           business_name TEXT,
-          is_verified INTEGER NOT NULL DEFAULT 0
+          is_verified INTEGER NOT NULL DEFAULT 0,
+          email_verified INTEGER NOT NULL DEFAULT 0,
+          last_login_at TEXT
         )""")
 
         # Add columns if migrating existing DB
@@ -61,12 +66,47 @@ def run_migrations(db_path: str):
             con.execute("ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT")
         if "google_id" not in u_cols:
             con.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+        if "google_sub" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+        if "name" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN name TEXT")
         if "full_name" not in u_cols:
             con.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
+        if "avatar_url" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
         if "business_name" not in u_cols:
             con.execute("ALTER TABLE users ADD COLUMN business_name TEXT")
         if "is_verified" not in u_cols:
             con.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0")
+        if "email_verified" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+        if "last_login_at" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN last_login_at TEXT")
+
+        # Unique index on google_sub
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
+
+        # Sessions table for stateful server-side sessions & secure cookie management
+        con.execute("""CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          user_agent TEXT,
+          ip TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+
+        # Short-lived OAuth state store with PKCE code_verifier (10 min TTL)
+        con.execute("""CREATE TABLE IF NOT EXISTS oauth_states (
+          state TEXT PRIMARY KEY,
+          nonce TEXT NOT NULL,
+          code_verifier TEXT NOT NULL,
+          redirect_url TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )""")
 
         # OTP Codes table for strict Multi-Factor Authentication & verification
         con.execute("""CREATE TABLE IF NOT EXISTS otp_codes (
