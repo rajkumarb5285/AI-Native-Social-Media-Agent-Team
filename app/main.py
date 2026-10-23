@@ -134,6 +134,7 @@ from app.security.auth import (
     generate_numeric_otp, verify_google_id_token
 )
 from app.security.audit import AuditLogger
+from app.security.rbac import Role
 from app.security.rate_limit import check_rate_limit
 from app.integrations.manager import platform_manager
 from app.integrations.base import ConnectionRecord
