@@ -270,8 +270,8 @@ cors_origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
 if cors_origins_raw == "*":
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
+        allow_origin_regex=r"https?://.*",
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
