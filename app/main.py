@@ -45,6 +45,7 @@ class RunRequest(BaseModel):
     offer: str = Field(default="", max_length=400)
     context: str = Field(default="", max_length=4000)
     approval_required: bool = True
+    primary_color: Optional[str] = None
 
 class ConnectAccountRequest(BaseModel):
     platform: str
@@ -122,6 +123,8 @@ class PosterRenderRequest(BaseModel):
     address: Optional[str] = None
     website: Optional[str] = None
     rating: Optional[str] = None
+    primary_color: Optional[str] = None
+    brand_color: Optional[str] = None
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -135,7 +138,7 @@ from fastapi import Depends, Response
 from fastapi.responses import JSONResponse
 from app.db.migrations import run_migrations
 from app.security.auth import (
-    get_current_user, require_role, AuthenticatedUser, create_jwt, hash_password, verify_password,
+    get_current_user, get_optional_current_user, require_role, AuthenticatedUser, create_jwt, hash_password, verify_password,
     validate_password_strength, create_mfa_challenge_token, verify_mfa_challenge_token,
     generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp_code,
     generate_numeric_otp, verify_google_id_token, generate_pkce_pair, generate_oauth_state,
@@ -183,6 +186,7 @@ async def run_workflow(req: RunRequest):
         offer=req.offer,
         context=req.context,
         approval_required=req.approval_required,
+        primary_color=req.primary_color,
         live_search_enabled=os.getenv("ENABLE_LIVE_SEARCH", "false").lower() == "true"
     )
 
@@ -1589,6 +1593,7 @@ async def verify_connection_live(connection_id: str, user: AuthenticatedUser = D
 # ---------------------------------------------------------------------------
 
 @app.get("/api/profile")
+@app.get("/api/business-profile")
 def get_business_profile(user: AuthenticatedUser = Depends(get_current_user)):
     with db() as con:
         row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
@@ -1611,6 +1616,7 @@ def get_business_profile(user: AuthenticatedUser = Depends(get_current_user)):
     }
 
 @app.post("/api/profile")
+@app.post("/api/business-profile")
 def save_business_profile(profile: BusinessProfileModel, user: AuthenticatedUser = Depends(get_current_user)):
     with db() as con:
         con.execute("""
@@ -1698,7 +1704,7 @@ def list_templates():
     return {"templates": TEMPLATES, "count": len(TEMPLATES)}
 
 @app.post("/api/poster/render")
-def render_custom_poster(req: PosterRenderRequest, user: AuthenticatedUser = Depends(get_current_user)):
+def render_custom_poster(req: PosterRenderRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)):
     data_uri, static_url = generate_social_poster(
         brand=req.business_name or "Your Business",
         headline=req.title,
@@ -1707,10 +1713,12 @@ def render_custom_poster(req: PosterRenderRequest, user: AuthenticatedUser = Dep
         business_phone=req.phone,
         business_address=req.address,
         business_website=req.website,
-        rating_text=req.rating
+        rating_text=req.rating,
+        brand_color=req.primary_color or req.brand_color
     )
     return {
         "poster_url": data_uri,
         "static_url": static_url,
-        "theme": req.theme
+        "theme": req.theme,
+        "primary_color": req.primary_color or req.brand_color
     }

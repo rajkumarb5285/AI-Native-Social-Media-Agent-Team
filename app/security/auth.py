@@ -405,10 +405,21 @@ async def get_current_user(
 
     raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
 
+async def get_optional_current_user(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    nexus_session: Optional[str] = Cookie(None)
+) -> Optional[AuthenticatedUser]:
+    try:
+        return await get_current_user(request, authorization, nexus_session)
+    except HTTPException:
+        return None
+
 def require_role(allowed_roles: list[str]):
     async def role_checker(user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
         if user.role not in allowed_roles:
             raise HTTPException(status_code=403, detail=f"Operation requires one of roles: {allowed_roles}. Current role: {user.role}")
         return user
     return role_checker
+
 

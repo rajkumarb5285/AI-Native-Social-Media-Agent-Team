@@ -9,6 +9,7 @@ from app.security.auth import verify_jwt
 def setup_test_db(tmp_path, monkeypatch):
     test_db = tmp_path / "test_sec_runs.db"
     monkeypatch.setattr("app.main.DB_PATH", str(test_db))
+    monkeypatch.setenv("DATABASE_PATH", str(test_db))
     init_db()
 
 @pytest.fixture
@@ -87,6 +88,7 @@ def test_publish_approval_and_connection_guard(client):
 
     # Create run
     res = client.post("/api/runs", json={"brand": "Brand Guard", "goal": "Test Guard"}, headers=headers)
+    assert res.status_code == 200, f"Create run failed: {res.text}"
     run_id = res.json()["id"]
 
     # Attempt publish before approval -> 403 Forbidden
@@ -109,6 +111,7 @@ def test_audit_trail(client):
 
     # Create and approve run
     res = client.post("/api/runs", json={"brand": "Audit Brand", "goal": "Audit Goal"}, headers=headers)
+    assert res.status_code == 200, f"Create run failed: {res.text}"
     run_id = res.json()["id"]
     client.post(f"/api/runs/{run_id}/approve", headers=headers)
 

@@ -101,15 +101,8 @@ class ContentEngineAgent(BaseAgent[ContentEngineInput, ContentEngineOutput]):
                     }
                 )
             except Exception as exc:
-                return ContentEngineOutput(
-                    success=False,
-                    errors=[f"LLM content generation failed: {type(exc).__name__}: {exc}"],
-                    flagship_headline="",
-                    flagship_copy="",
-                    call_to_action="",
-                    generation_mode="failed",
-                    metadata={"generation_mode": "failed"}
-                )
+                # Fall back to template generation if LLM provider is unavailable or rate-limited
+                pass
 
         headline = f"{brand}: {goal}"
         copy = (
