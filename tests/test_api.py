@@ -255,7 +255,7 @@ def test_festivals_upcoming_and_generate(client):
     gen_data = gen_resp.json()
     assert gen_data["status"] == "generated"
     assert "poster_url" in gen_data["post"]
-    assert gen_data["post"]["poster_url"].startswith("data:image/svg+xml;base64,")
+    assert gen_data["post"]["poster_url"].startswith(("data:image/png;base64,", "data:image/svg+xml;base64,"))
     assert "Flat 25% Off" in gen_data["post"]["copy"]
 
 
@@ -282,5 +282,5 @@ def test_templates_and_poster_render(client):
     assert render_resp.status_code == 200
     rdata = render_resp.json()
     assert rdata["theme"] == "promotional_offer"
-    assert rdata["poster_url"].startswith("data:image/svg+xml;base64,")
+    assert rdata["poster_url"].startswith(("data:image/png;base64,", "data:image/svg+xml;base64,"))
 

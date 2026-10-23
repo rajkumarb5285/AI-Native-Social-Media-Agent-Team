@@ -2854,7 +2854,7 @@
           if (hasPoster) {
             posterHtml = `
               <div class="poster-box">
-                <img src="${post.poster_url}" alt="${esc(post.platform)} Visual Poster" class="poster-img" />
+                <img src="${post.poster_url || post.poster_path}" alt="${esc(post.platform)} Visual Poster" class="poster-img" loading="lazy" onerror="if(this.dataset.fallback!=='1' && '${post.poster_path}'){this.dataset.fallback='1';this.src='${post.poster_path}';}" />
                 <div class="poster-meta-bar">
                   <span class="poster-tag">✦ 1080×1080 Visual Poster</span>
                   <a href="${post.poster_url}" download="${esc(brand).toLowerCase().replace(/\s+/g,'_')}_${post.platform.toLowerCase()}_poster.png" class="btn-dl">
