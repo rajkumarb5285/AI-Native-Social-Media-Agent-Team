@@ -26,6 +26,16 @@ class AuthenticatedUser(BaseModel):
     role: str = Role.EDITOR.value
     tenant_id: str = "default"
 
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Strict production password validation."""
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long."
+    has_letter = any(c.isalpha() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    if not (has_letter and has_digit):
+        return False, "Password must contain at least one letter and one number."
+    return True, ""
+
 def hash_password(password: str, salt: Optional[str] = None) -> str:
     """PBKDF2 password hashing. Store the random salt with the digest."""
     salt_value = salt or secrets.token_hex(16)
@@ -69,6 +79,150 @@ def verify_jwt(token: str) -> Optional[AuthenticatedUser]:
         return AuthenticatedUser(user_id=data["sub"], email=data["email"], role=role, tenant_id=data["tenant_id"])
     except Exception:
         return None
+
+# ---------------------------------------------------------------------------
+# Strict MFA & Real-time OTP Engine (Google Authenticator TOTP & Timed Codes)
+# ---------------------------------------------------------------------------
+
+def create_mfa_challenge_token(user_id: str, email: str, role: str, tenant_id: str, expires_in_seconds: int = 300) -> str:
+    """Issues a 5-minute cryptographic challenge token pending MFA validation."""
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "MFA_CHALLENGE"}, separators=(",", ":")).encode()).decode().rstrip("=")
+    payload_data = {
+        "sub": user_id,
+        "email": email,
+        "role": role,
+        "tenant_id": tenant_id,
+        "purpose": "mfa_pending",
+        "exp": int(time.time()) + expires_in_seconds
+    }
+    payload = base64.urlsafe_b64encode(json.dumps(payload_data, separators=(",", ":")).encode()).decode().rstrip("=")
+    sig = hmac.new(JWT_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
+    return f"{header}.{payload}.{base64.urlsafe_b64encode(sig).decode().rstrip('=')}"
+
+def verify_mfa_challenge_token(token: str) -> Optional[dict]:
+    """Validates the temporary MFA challenge token."""
+    try:
+        header, payload, supplied_sig = token.split(".")
+        expected_sig = hmac.new(JWT_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
+        supplied_bytes = base64.urlsafe_b64decode(supplied_sig + "=" * (-len(supplied_sig) % 4))
+        if not hmac.compare_digest(expected_sig, supplied_bytes):
+            return None
+        data = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode())
+        if int(data.get("exp", 0)) <= int(time.time()):
+            return None
+        if data.get("purpose") != "mfa_pending":
+            return None
+        return data
+    except Exception:
+        return None
+
+def generate_totp_secret() -> str:
+    """Generates an RFC 6238 Base32 secret for Google Authenticator / 1Password."""
+    import pyotp
+    return pyotp.random_base32()
+
+def get_totp_uri(secret: str, email: str, issuer: str = "Nexus Studio AI") -> str:
+    """Generates otpauth:// URI for scanning."""
+    import pyotp
+    totp = pyotp.TOTP(secret)
+    return totp.provisioning_uri(name=email, issuer_name=issuer)
+
+def generate_qr_code_base64(uri: str) -> str:
+    """Generates a high-contrast PNG QR code as a base64 data URI."""
+    try:
+        import qrcode
+        import io
+        qr = qrcode.QRCode(version=1, box_size=8, border=2)
+        qr.add_data(uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#0f172a", back_color="#ffffff")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        encoded = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/png;base64,{encoded}"
+    except Exception:
+        return ""
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    """Verifies a 6-digit TOTP code with +-1 window (30s drift tolerance)."""
+    try:
+        import pyotp
+        totp = pyotp.TOTP(secret)
+        return totp.verify(str(code).strip(), valid_window=1)
+    except Exception:
+        return False
+
+def generate_numeric_otp(digits: int = 6) -> str:
+    """Generates a cryptographically secure 6-digit numeric OTP code."""
+    min_val = 10 ** (digits - 1)
+    max_val = (10 ** digits) - 1
+    return str(secrets.randbelow(max_val - min_val + 1) + min_val)
+
+# ---------------------------------------------------------------------------
+# Real-Time Google OAuth 2.0 / Google Identity Services Token Verification
+# ---------------------------------------------------------------------------
+
+async def verify_google_id_token(token: str) -> dict:
+    """
+    Validates a real Google ID token (from Google Identity Services / One Tap / GSI)
+    using Google's official public tokeninfo service.
+    Returns: { email, name, sub, picture, email_verified }
+    Raises HTTPException(401) on invalid or forged tokens.
+    """
+    if not token or not token.strip():
+        raise HTTPException(status_code=400, detail="Missing Google ID token.")
+
+    clean_token = token.strip()
+    # 1. First attempt verification using google.oauth2 if available
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
+        configured_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip() or None
+        idinfo = google_id_token.verify_oauth2_token(
+            clean_token,
+            google_requests.Request(),
+            audience=configured_client_id
+        )
+        if not idinfo.get("email_verified", False):
+            raise HTTPException(status_code=401, detail="Google email address is not verified by Google.")
+        return {
+            "email": idinfo.get("email", "").lower().strip(),
+            "name": idinfo.get("name", ""),
+            "sub": idinfo.get("sub", ""),
+            "picture": idinfo.get("picture", "")
+        }
+    except Exception:
+        pass
+
+    # 2. Direct online verification with Google's OAuth2 tokeninfo endpoint
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": clean_token}
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=401, detail=f"Google token rejected by Google authentication servers ({resp.status_code}).")
+            data = resp.json()
+            if not data.get("email"):
+                raise HTTPException(status_code=401, detail="Google token did not contain an email address.")
+            if data.get("email_verified") not in (True, "true", "True", 1):
+                raise HTTPException(status_code=401, detail="Google email is not verified.")
+            return {
+                "email": data.get("email", "").lower().strip(),
+                "name": data.get("name", ""),
+                "sub": data.get("sub", ""),
+                "picture": data.get("picture", "")
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Failed to verify Google credentials with Google OAuth: {str(e)}")
+
+# ---------------------------------------------------------------------------
+# RBAC & Dependency Injection
+# ---------------------------------------------------------------------------
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> AuthenticatedUser:
     if not authorization or not authorization.startswith("Bearer "):

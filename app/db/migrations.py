@@ -35,12 +35,49 @@ def run_migrations(db_path: str):
           expires_at TEXT, scopes_json TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1
         )""")
 
-        # Users table
+        # Users table with strict security, MFA, and Google OAuth bindings
         con.execute("""CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'editor', tenant_id TEXT NOT NULL DEFAULT 'default',
-          is_active INTEGER NOT NULL DEFAULT 1
+          is_active INTEGER NOT NULL DEFAULT 1,
+          mfa_enabled INTEGER NOT NULL DEFAULT 0,
+          mfa_secret TEXT,
+          mfa_backup_codes TEXT,
+          google_id TEXT,
+          full_name TEXT,
+          business_name TEXT,
+          is_verified INTEGER NOT NULL DEFAULT 0
+        )""")
+
+        # Add columns if migrating existing DB
+        user_cursor = con.execute("PRAGMA table_info(users)")
+        u_cols = {row[1] for row in user_cursor.fetchall()}
+        if "mfa_enabled" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0")
+        if "mfa_secret" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN mfa_secret TEXT")
+        if "mfa_backup_codes" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT")
+        if "google_id" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+        if "full_name" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
+        if "business_name" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN business_name TEXT")
+        if "is_verified" not in u_cols:
+            con.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0")
+
+        # OTP Codes table for strict Multi-Factor Authentication & verification
+        con.execute("""CREATE TABLE IF NOT EXISTS otp_codes (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          challenge_token TEXT NOT NULL,
+          otp_code TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          used INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
         )""")
 
         # Durable publication idempotency ledger. A reserved key is never silently retried

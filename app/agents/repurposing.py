@@ -11,7 +11,14 @@ PLATFORM_LIMITS = {
     "x": 280,
     "instagram": 2200,
     "facebook": 5000,
-    "youtube": 1000
+    "youtube": 1000,
+    "gmb": 1500,
+    "google_business": 1500,
+    "google": 1500,
+    "google business": 1500,
+    "threads": 500,
+    "pinterest": 500,
+    "tiktok": 2200
 }
 
 
@@ -72,6 +79,12 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
             elif key == "instagram":
                 copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
                 hashtags = ["#BehindTheScenes", "#Growth"]
+            elif key in ("gmb", "google_business", "google", "google business"):
+                copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n📍 Visit / Connect with Us Today: {input_data.call_to_action}"
+                hashtags = ["#GoogleBusiness", "#LocalFavorite", "#Verified"]
+            elif key in ("facebook", "youtube"):
+                copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
+                hashtags = ["#Spotlight", "#Community"]
             else:
                 copy = f"{input_data.headline}\n\n{input_data.flagship_copy}\n\n{input_data.call_to_action}"
                 hashtags = ["#Marketing", "#Innovation"]
@@ -84,11 +97,13 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
             poster_url = ""
             poster_path = ""
             try:
+                poster_style = "gmb_local" if key in ("gmb", "google_business", "google", "google business") else getattr(input_data, "tone", "visionary")
                 poster_url, poster_path = generate_social_poster(
                     brand=input_data.brand,
                     headline=input_data.headline,
                     platform=platform,
                     tone=getattr(input_data, "tone", "visionary"),
+                    style=poster_style,
                     call_to_action=input_data.call_to_action
                 )
             except Exception:

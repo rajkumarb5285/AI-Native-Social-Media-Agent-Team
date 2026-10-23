@@ -89,7 +89,7 @@ def generate_social_poster(
         theme = "festival_celebration"
     elif any(k in resolved_style or k in headline_lower for k in ["sale", "promo", "discount", "offer", "deal"]):
         theme = "promotional_offer"
-    elif any(k in resolved_style or k in headline_lower for k in ["gmb", "local", "store", "shop"]):
+    elif any(k in resolved_style or k in headline_lower or k in platform.lower() for k in ["gmb", "local", "store", "shop", "google_business", "google"]):
         theme = "gmb_local"
     elif any(k in resolved_style or k in headline_lower for k in ["luxury", "gold", "elite", "vip"]):
         theme = "luxury_gold"
