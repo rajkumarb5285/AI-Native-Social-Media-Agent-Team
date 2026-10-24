@@ -28,10 +28,10 @@ export default function StudioFloorPage() {
   const [phone, setPhone] = React.useState("+91 98200 12345");
   const [address, setAddress] = React.useState("42 Koregaon Park, Pune");
 
-  const [objective, setObjective] = React.useState("Diwali Festive Special Offer");
+  const [objective, setObjective] = React.useState("Single-Origin Cold Brew Tasting");
   const [tone, setTone] = React.useState("Warm Editorial");
-  const [brandColor, setBrandColor] = React.useState("#F59E0B");
-  const [verifiedOffer, setVerifiedOffer] = React.useState("15% Off Cold Brew Reserve (Valid weekdays)");
+  const [brandColor, setBrandColor] = React.useState("#D97706");
+  const [verifiedOffer, setVerifiedOffer] = React.useState("15% Off Cold Brew Reserve on Weekdays");
   const [selectedPlatforms, setSelectedPlatforms] = React.useState<string[]>([
     "Instagram",
     "GMB",
@@ -39,12 +39,12 @@ export default function StudioFloorPage() {
   ]);
 
   const [isWorking, setIsWorking] = React.useState(false);
-  const [archetype, setArchetype] = React.useState<string>("hero-text");
+  const [archetype, setArchetype] = React.useState<string>("split-image-text");
   const [activePosterUrl, setActivePosterUrl] = React.useState(
     "http://127.0.0.1:8000/static/generated/posters/66f4e5ff-eb1f-4147-b171-2e6481b01163.png"
   );
   const [activeHeadline, setActiveHeadline] = React.useState(
-    "Diwali Festive Special: Cold Brew Reserve"
+    "Artisanal Single-Origin Cold Brew"
   );
   const [agentStep, setAgentStep] = React.useState<"idle" | "research" | "copy" | "design" | "done">("idle");
   const [latestRunId, setLatestRunId] = React.useState<string | null>(null);
@@ -55,6 +55,24 @@ export default function StudioFloorPage() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const handleOpenCanva = async () => {
+    try {
+      const res = await campaignService.createCanvaDesign({
+        title: activeHeadline,
+        brand_color: brandColor,
+        width: 1080,
+        height: 1350,
+      });
+      if (res?.edit_url) {
+        window.open(res.edit_url, "_blank");
+        showToast("🎨 Opened in Canva AI Studio!");
+      }
+    } catch (_) {
+      window.open("https://www.canva.com/create/posters/?width=1080&height=1350&unit=px", "_blank");
+    }
+  };
+
 
   // Load brand profile and authenticate
   React.useEffect(() => {
@@ -330,18 +348,58 @@ export default function StudioFloorPage() {
                 </div>
               </div>
 
+              {/* Canva Design Theme & Brand Palette */}
+              <div>
+                <label className="text-stone-300 font-medium block mb-1.5 flex items-center justify-between">
+                  <span>Canva Color Theme & Mood</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Dynamic WCAG</span>
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { id: "terracotta", name: "Artisan", hex: "#D97706" },
+                    { id: "indigo", name: "Cyber", hex: "#6366F1" },
+                    { id: "emerald", name: "Wellness", hex: "#10B981" },
+                    { id: "crimson", name: "Flash", hex: "#EF4444" },
+                    { id: "blue", name: "Keynote", hex: "#3B82F6" },
+                    { id: "gold", name: "Luxury", hex: "#D4AF37" },
+                    { id: "slate", name: "Minimal", hex: "#78716C" },
+                    { id: "magenta", name: "Joyful", hex: "#EC4899" },
+                  ].map((p) => {
+                    const isSelected = brandColor.toUpperCase() === p.hex.toUpperCase();
+                    return (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => setBrandColor(p.hex)}
+                        className={`p-1.5 rounded-lg border text-center transition-all flex items-center justify-center gap-1.5 ${
+                          isSelected
+                            ? "bg-white/10 border-white text-white font-semibold shadow-md"
+                            : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200"
+                        }`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.hex }} />
+                        <span className="text-[11px]">{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Design Layout Archetype (Prompt Pack) */}
               <div>
                 <label className="text-stone-300 font-medium block mb-1.5 flex items-center justify-between">
-                  <span>Layout Archetype</span>
-                  <span className="text-[10px] text-amber-400 font-mono">Section 4.5 Spec</span>
+                  <span>Canva Layout Archetype</span>
+                  <span className="text-[10px] text-amber-400 font-mono">7 Pro Templates</span>
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {[
+                    { id: "split-image-text", name: "Split Showcase", desc: "Food, dining & products" },
                     { id: "hero-text", name: "Hero Text", desc: "Bold headline focus" },
-                    { id: "centered-badge", name: "Centered Badge", desc: "Festivals & Openings" },
+                    { id: "centered-badge", name: "Centered Badge", desc: "Festivals & openings" },
                     { id: "offer-burst", name: "Offer Burst", desc: "Flash sales & discounts" },
-                    { id: "quote-card", name: "Quote Card", desc: "Client testimonials" },
+                    { id: "quote-card", name: "Quote Card", desc: "Reviews & testimonials" },
+                    { id: "event-ticket", name: "Event Ticket", desc: "Conferences & dates" },
+                    { id: "minimal-editorial", name: "Minimal Editorial", desc: "Quiet luxury & monograph" },
                   ].map((arch) => (
                     <button
                       type="button"
@@ -359,6 +417,7 @@ export default function StudioFloorPage() {
                   ))}
                 </div>
               </div>
+
 
               {/* Tone of Voice */}
               <div>
@@ -527,23 +586,33 @@ export default function StudioFloorPage() {
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between">
+              <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setIsZoomOpen(true)}
                   className="text-stone-400 hover:text-stone-200 text-xs flex items-center gap-1"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Inspect Full Size</span>
+                  <span>Inspect</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCanva}
+                  className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-500/20 to-cyan-500/20 hover:from-teal-500/30 hover:to-cyan-500/30 text-teal-300 border border-teal-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Open and edit layout inside Canva AI Design Studio"
+                >
+                  <span>🎨 Edit in Canva AI</span>
                 </button>
 
                 <Link href="/review">
                   <Button variant="primary" size="sm">
-                    <span>Proceed to Review</span>
+                    <span>Review</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </Link>
               </div>
+
             </div>
           </section>
         </div>

@@ -1895,3 +1895,38 @@ def get_training_logs(min_score: float = 8.0, only_approved: bool = False):
     dataset = export_training_dataset(min_score=min_score, only_approved=only_approved)
     return {"count": len(dataset), "samples": dataset}
 
+
+# ---------------------------------------------------------------------------
+# Canva Connect API Endpoints
+# ---------------------------------------------------------------------------
+
+class CanvaCreateDesignReq(BaseModel):
+    title: str
+    design_type: Optional[str] = "social_media_post"
+    width: Optional[int] = 1080
+    height: Optional[int] = 1350
+    brand_color: Optional[str] = None
+
+
+@app.get("/api/canva/status")
+def get_canva_status():
+    """Returns Canva Connect API configuration status."""
+    from app.services.canva_service import get_canva_config
+    cfg = get_canva_config()
+    return cfg.model_dump()
+
+
+@app.post("/api/canva/create-design")
+async def create_design_in_canva(req: CanvaCreateDesignReq):
+    """Creates a new design in Canva or generates a direct Canva editor link."""
+    from app.services.canva_service import create_canva_design, CanvaDesignRequest
+    res = await create_canva_design(CanvaDesignRequest(
+        title=req.title,
+        design_type=req.design_type or "social_media_post",
+        width=req.width or 1080,
+        height=req.height or 1350,
+        brand_color=req.brand_color
+    ))
+    return res
+
+

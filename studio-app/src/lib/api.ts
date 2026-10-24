@@ -282,4 +282,16 @@ export const campaignService = {
   async disconnectPlatform(platform: string) {
     return fetchApi(`/api/connections/${platform}`, { method: "DELETE" });
   },
+
+  async createCanvaDesign(data: { title: string; brand_color?: string; width?: number; height?: number }) {
+    return fetchApi("/api/canva/create-design", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getCanvaStatus() {
+    return fetchApi("/api/canva/status");
+  },
 };
+

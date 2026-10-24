@@ -210,40 +210,116 @@ async def brief_analyst_node(state: PosterState) -> Dict[str, Any]:
 
 
 async def art_director_node(state: PosterState) -> Dict[str, Any]:
-    """Node 2: Art Director - determines concept, palette (WCAG validated), and layout archetype."""
+    """Node 2: Art Director - determines concept, rich Canva palette, and layout archetype."""
     brief = state.get("brief", {})
     req = state.get("request", {})
-    p_color = req.get("primary_color") or req.get("brand_color") or "#6366F1"
     provider = get_llm_provider()
 
-    # Pre-select archetype based on brief objective
-    title = str(brief.get("copy", {}).get("headline", "")).lower()
-    if any(k in title for k in ("diwali", "festival", "holiday", "celebration", "shubh")):
-        selected_archetype = "centered-badge"
-    elif any(k in title for k in ("off", "sale", "discount", "deal", "limited")):
-        selected_archetype = "offer-burst"
-    elif any(k in title for k in ("review", "quote", "testimonial", "star", "says")):
-        selected_archetype = "quote-card"
-    else:
-        selected_archetype = req.get("archetype") or "hero-text"
+    title = str(brief.get("copy", {}).get("headline", "") or req.get("title", "")).lower()
+    user_color = req.get("primary_color") or req.get("brand_color")
+    has_custom_color = bool(user_color and user_color.upper() != "#F59E0B")
 
-    direction_data = {
-        "concept": f"Clean authority layout focusing on {brief.get('copy', {}).get('headline', '')}",
-        "focal_point": {"element": "headline", "why_it_wins": "scale and isolation"},
-        "layout_archetype": selected_archetype,
-        "palette": {
+    # Intelligent Canva theme and archetype inference
+    if any(k in title for k in ("coffee", "cafe", "food", "dining", "roast", "restaurant", "bakery", "bistro", "culinary")):
+        selected_archetype = req.get("archetype") or "split-image-text"
+        accent = user_color if has_custom_color else "#D97706"
+        palette = {
+            "background": "#140D07",
+            "surface": "#24170F",
+            "primary": "#FFF8F0",
+            "muted": "#D1C7BD",
+            "accent": accent
+        }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    elif any(k in title for k in ("summit", "conference", "event", "workshop", "meetup", "ticket", "hackathon")):
+        selected_archetype = req.get("archetype") or "event-ticket"
+        accent = user_color if has_custom_color else "#3B82F6"
+        palette = {
+            "background": "#050B18",
+            "surface": "#0A1329",
+            "primary": "#F8FAFC",
+            "muted": "#93C5FD",
+            "accent": accent
+        }
+        type_pairing = {"display": "Space Grotesk", "text": "Inter"}
+
+    elif any(k in title for k in ("off", "sale", "discount", "deal", "clearance", "flash")):
+        selected_archetype = req.get("archetype") or "offer-burst"
+        accent = user_color if has_custom_color else "#EF4444"
+        palette = {
+            "background": "#0A0A0A",
+            "surface": "#1C0A0A",
+            "primary": "#FFFFFF",
+            "muted": "#CBD5E1",
+            "accent": accent
+        }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    elif any(k in title for k in ("review", "quote", "testimonial", "star", "google 5", "ratings")):
+        selected_archetype = req.get("archetype") or "quote-card"
+        accent = user_color if has_custom_color else "#10B981"
+        palette = {
+            "background": "#06281E",
+            "surface": "#0A3B2D",
+            "primary": "#ECFDF5",
+            "muted": "#A7F3D0",
+            "accent": accent
+        }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    elif any(k in title for k in ("luxury", "boutique", "monograph", "silence", "architect", "atelier")):
+        selected_archetype = req.get("archetype") or "minimal-editorial"
+        accent = user_color if has_custom_color else "#78716C"
+        palette = {
+            "background": "#F5F5F4",
+            "surface": "#E7E5E4",
+            "primary": "#1C1917",
+            "muted": "#57534E",
+            "accent": accent
+        }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    elif any(k in title for k in ("diwali", "deepavali", "holi", "eid", "christmas", "new year", "festival", "holiday", "shubh")):
+        selected_archetype = req.get("archetype") or "centered-badge"
+        from app.services.poster.knowledge import get_cultural_rules
+        fest = get_cultural_rules(title)
+        if fest:
+            palette = fest.palette
+        else:
+            palette = {
+                "background": "#0B0712",
+                "surface": "#231435",
+                "primary": "#FFFBEB",
+                "muted": "#E9D5FF",
+                "accent": user_color or "#EAB308"
+            }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    else:
+        # Default modern tech / authority
+        selected_archetype = req.get("archetype") or "hero-text"
+        accent = user_color if has_custom_color else "#6366F1"
+        palette = {
             "background": "#0B0F19",
             "surface": "#1E293B",
             "primary": "#F8FAFC",
             "muted": "#94A3B8",
-            "accent": p_color
-        },
-        "type_pairing": {"display": "Playfair Display", "text": "Inter"}
+            "accent": accent
+        }
+        type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    direction_data = {
+        "concept": f"Canva-grade high-impact visual design for {brief.get('copy', {}).get('headline', '')}",
+        "focal_point": {"element": "headline", "why_it_wins": "visual weight, contrast, and scale"},
+        "layout_archetype": selected_archetype,
+        "palette": palette,
+        "type_pairing": type_pairing
     }
 
     return {
         "direction": direction_data,
-        "events": state.get("events", []) + [{"stage": "art_director", "message": f"Chose archetype: {selected_archetype}"}]
+        "events": state.get("events", []) + [{"stage": "art_director", "message": f"Canva AI direction: {selected_archetype} with accent {palette['accent']}"}]
     }
 
 
@@ -258,6 +334,7 @@ async def layout_planner_node(state: PosterState) -> Dict[str, Any]:
     subhead = brief.get("copy", {}).get("subhead") or req.get("subtitle") or "Empowering businesses with AI content automation"
     cta = brief.get("copy", {}).get("cta") or req.get("cta") or "Get Started"
     p_color = direction.get("palette", {}).get("accent", "#6366F1")
+    bg_color = direction.get("palette", {}).get("background", "#0B0F19")
     business_name = req.get("business_name") or "Your Business"
 
     # Generate the validated layout spec for the chosen archetype
@@ -266,14 +343,16 @@ async def layout_planner_node(state: PosterState) -> Dict[str, Any]:
         headline=headline,
         subhead=subhead,
         primary_color=p_color,
+        bg_color=bg_color,
         cta=cta,
         business_name=business_name
     )
 
     return {
         "spec": spec_obj.model_dump(),
-        "events": state.get("events", []) + [{"stage": "layout_planner", "message": f"Generated 8px grid layout spec for {archetype}"}]
+        "events": state.get("events", []) + [{"stage": "layout_planner", "message": f"Generated Canva 8px grid layout spec for {archetype}"}]
     }
+
 
 
 async def renderer_node(state: PosterState) -> Dict[str, Any]:

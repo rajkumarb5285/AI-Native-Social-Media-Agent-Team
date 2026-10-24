@@ -179,15 +179,33 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
             )
             poster_url = poster_path = ""
             try:
-                poster_style = "gmb_local" if key == "gmb" else getattr(input_data, "tone", "visionary")
-                poster_url, poster_path = generate_social_poster(
-                    brand=input_data.brand, headline=input_data.headline, platform=platform,
-                    tone=getattr(input_data, "tone", "visionary"), style=poster_style,
-                    call_to_action=input_data.call_to_action,
-                    brand_color=getattr(input_data, "primary_color", None),
+                from app.services.poster.archetypes import get_archetype_template
+                from app.services.poster.renderer import render_poster_spec
+                
+                # Infer Canva archetype from platform or headline
+                arch = "quote-card" if key == "gmb" else ("split-image-text" if any(k in input_data.headline.lower() for k in ("coffee", "food", "dining", "product")) else "hero-text")
+                spec = get_archetype_template(
+                    archetype=arch,
+                    headline=input_data.headline,
+                    subhead=copy[:120] if copy else None,
+                    primary_color=getattr(input_data, "primary_color", None) or "#6366F1",
+                    cta=input_data.call_to_action or "Learn More",
+                    business_name=input_data.brand
                 )
+                render_res = render_poster_spec(spec)
+                poster_url = render_res.png_base64
             except Exception:
-                pass
+                try:
+                    poster_style = "gmb_local" if key == "gmb" else getattr(input_data, "tone", "visionary")
+                    poster_url, poster_path = generate_social_poster(
+                        brand=input_data.brand, headline=input_data.headline, platform=platform,
+                        tone=getattr(input_data, "tone", "visionary"), style=poster_style,
+                        call_to_action=input_data.call_to_action,
+                        brand_color=getattr(input_data, "primary_color", None),
+                    )
+                except Exception:
+                    pass
+
             posts.append(PlatformPost(
                 platform=platform, format="social_post", copy=copy, character_count=count, char_limit=limit,
                 within_limits=count <= limit, hashtags=hashtags, media_prompt=media_prompt,
