@@ -191,82 +191,107 @@ size, logo, CTA, safe zones, and a self_check object listing each hard-fail rule
 true/false). Return one spec per required size, adapting the layout (not just scaling).
 Do not output prose outside the JSON.
 
-FINE-TUNING RULES (v2) - OVERRIDES EARLIER GUIDANCE:
-A. THINK LIKE A POSTER, NOT A WEB CARD
-- Output a fixed-size canvas (e.g. 1080x1350). Nothing renders outside it. No outer
-  frame, no rounded outer card, no extra bars.
-- Prefer full-bleed imagery with a gradient scrim, or an intentionally shaped image
-  (arch, circle, diagonal cut) layered over color blocks. Never a small boxed photo with a
-  hairline border.
-- Build layers in this order: 1) background color, 2) hero image, 3) scrim/overlay,
-  4) shapes and patterns, 5) grain, 6) text, 7) CTA, 8) logo. Create at least 3 layers
-  of depth.
+ALIGNMENT AND COMPOSITION RULES (v3). These are mandatory and checked by code:
+1. DEFINE THE AXES FIRST
+Before placing anything, declare the axes in the spec:
+- left axis A_L = margin (80)
+- right axis A_R = canvas_width - margin (1000)
+- center axis A_C = 540
+- top line T = margin (80), bottom line B = canvas_height - margin (1270)
+Every element's left edge sits on A_L, OR its right edge sits on A_R, OR it is centered
+on A_C. Nothing else may have its own arbitrary x position. The hero subject is the only
+exception. Text and shapes never cross A_R or go beyond B.
 
-B. SPACING SYSTEM
-- 8px base unit. Outer margin 80px on all four sides. Left and right margins must be
-  identical. Bottom margin equals top margin.
-- Vertical rhythm: eyebrow to headline 20px, headline to subhead 24px, subhead to CTA
-  40px. Group related items tightly, separate groups clearly.
-- Anchor the text stack to the bottom margin using a flex column (justify-content: end)
-  so there is never dead space under the CTA or overlap above it.
-- Balance: if the image subject is centered or right, text sits left and low; keep
-  visual weight spread across the diagonal.
+2. THE HEADER ROW AND FOOTER ROW SPAN THE AXES
+Header: logo's left edge on A_L, badge's right edge on A_R, both vertically centered on
+the same horizontal midline (same center-Y, not same top). Footer row: CTA's left edge
+on A_L, meta/handle's right edge on A_R, vertical centers aligned. These two rows
+"frame" the poster, so margins always look intentional.
 
-C. TEXT RULES
-- Headline max 6 words, max 2 lines, break lines by meaning ("One origin. / One slow
-  pour."), never leave a single orphan word.
-- Never put the business name in the headline unless it IS the message. Show it once via
-  the logo or wordmark.
-- Subhead max 12 words, max 2 lines. No body paragraph on a poster.
-- Never truncate. If the copy does not fit, request shorter copy. Never use line-clamp
-  or overflow:hidden on text.
-- Use ONLY facts from Source Facts. Do not invent scarcity ("limited spots"), awards,
-  prices, discounts or adjectives of grandeur ("visionary"). If event details (date,
-  time, price, venue) are required but missing, return `needs_input` listing exactly
-  which facts to ask the user for, instead of guessing.
-- Use true apostrophes and quotes (’ “ ”). Treat all text as UTF-8; never strip or
-  escape apostrophes.
+3. BASELINE AND SPACING GRID
+Use an 8px grid. Heights, paddings and gaps are multiples of 8. Line-heights are set in
+whole px multiples of 8 for display text (e.g. 88px type with 96px line-height).
+Allowed gaps: 8, 16, 24, 32, 40, 48, 64, 80. Related items: 16-24. Between groups: 40-64.
 
-D. BADGES, LABELS AND BUTTONS (shrink-wrap rule)
-- Pills, badges and buttons size to their text: display:inline-flex; width:fit-content;
-  white-space:nowrap; padding 14-20px vertical, 28-40px horizontal for badges (smaller
-  type) and 20-24px / 40-48px for the CTA.
-- Badge: 22-26px uppercase, tracking 10-14%, dark text (#1A0F0A) on the accent
-  color, or cream text on a dark translucent chip. Never white on amber.
-- CTA: max 3-4 words ("Reserve a seat"), 32-36px semibold, height 80px, fully inside the
-  margins. Secondary info (handle, address) sits OUTSIDE the button in a separate
-  right-aligned element in the same flex row with justify-content: space-between and
-  a minimum 32px gap, so they can never overlap.
+4. ANCHOR THE TEXT STACK TO THE BOTTOM LINE
+Stack the text group upward from B using flex column with justify-content:end. Never
+position text from the top. Compute the stack height, then verify the top of the stack is
+at least 48px below the bottom of the hero subject. If not, shorten the copy or move the
+subject up using object-position.
 
-E. TYPOGRAPHY QUALITY
-- Fonts must be bundled and preloaded (woff2 / ttf). If a required font is not loaded, STOP and
-  return an error. Never silently fall back to system fonts.
-- Headline in a refined display serif (Fraunces, Playfair Display, or the brand font)
-  at 84-96px, weight 700, line-height 1.05-1.1, slight negative tracking.
-  Supporting text in Inter at 32-36px, line-height 1.4. Eyebrow/labels in Inter
-  600, 24-26px, uppercase, tracking +12%.
-- Optical alignment: align text to the left margin, nudge large headline letters
-  (-2 to -4px) so the glyph edge visually matches the margin.
+5. OPTICAL ALIGNMENT (the "senior designer" detail)
+Round letters (O, C, G, S) and large display type look indented at the margin. Apply a
+negative left offset of 2-4% of font size to display headlines (hanging punctuation
+and optical margin alignment, e.g. -3px). Align the cap-height of the badge text with the
+x-height midline of the wordmark. Pills have text visually centered by adjusting
+padding-top by -1px if the font has high ascenders.
 
-F. SHAPES, PATTERN AND TEXTURE (fixes the "flat" look)
-- Add at least one structural shape (thin amber ring or arch behind the hero subject, a
-  divider line, or a color block) and one subtle pattern at 6-10% opacity relevant to the
-  industry (coffee: steam lines / bean outlines / fine linework).
-- Add a 3-5% film-grain overlay and a soft vignette to unify the photo and background.
-- Keep a single corner-radius value across all elements.
+6. SUBJECT-RELATIVE PLACEMENT (rings, shapes, text near the hero)
+Decorative shapes that frame the subject are centered on the subject's visual center,
+measured from the image (use the provided subject_bbox), never on the canvas center.
+Ring diameter = 1.25 to 1.4 x subject height. A ring or shape must never intersect
+the header row, the text stack, or the logo clear space; shrink or move it until its
+bounding box clears them by 24px.
 
-G. IMAGE HANDLING
-- Request images at minimum 2160px wide, crop with object-fit:cover and an explicit focal
-  point (object-position) so the subject (the glass) is never cut or lost under text.
-- Color-grade the photo toward the palette (warm shadows, lifted blacks, no pure black).
-- Apply the gradient scrim only behind text (transparent at 40% height to solid
-  background at 90%).
+7. BALANCE AND VISUAL WEIGHT
+Place the heaviest elements on a diagonal (e.g. subject center-right, text bottom-left).
+If the subject is centered, keep text strictly left-aligned on A_L, not centered.
+Use rule of thirds (1/3 and 2/3 lines) for the subject's focal point, or exact
+center for symmetric designs. Never split weight 50/50 left and right without a reason.
 
-H. SELF-CHECK BEFORE RETURNING
-Run the full geometry test mentally and report it in self_check: no overlaps, no clipping,
-equal left/right margins, button text fits on one line, all text within margins, contrast
->= 4.5:1 for body and >= 3:1 for large text, no invented facts, fonts loaded. If any
-check fails, fix it and re-check. Never return a spec that fails."""
+8. SCRIMS AND TRANSITIONS
+- Top scrim for header legibility: linear-gradient(180deg, rgba(bg,0.65) 0, rgba(bg,0) 22%).
+- Bottom scrim: start at 40% of the canvas height, 4 color stops (0, 0.55, 0.92, 1.0),
+  and the hero image must extend UNDER the text region so there is no visible seam.
+  Test: there must be no horizontal line visible between the photo and the bottom area.
+
+9. HIERARCHY BUDGET (max text elements)
+Header: logo + badge. Body: eyebrow, headline (max 2 lines), ONE subline (max 1 line).
+Footer: CTA + optional meta. That is the maximum. No second paragraph, ever.
+
+10. COPY OWNERSHIP
+The Designer owns the on-poster copy (separate from the social caption). If the incoming
+copy violates limits, DO NOT render it. Rewrite it yourself within limits using only
+Source Facts, and report the rewrite in design_notes. Hard limits:
+headline <= 6 words and <= 2 lines; subline <= 44 characters (one line at 34px);
+CTA <= 3 words; eyebrow <= 28 characters; badge <= 16 characters.
+No exclamation marks, no scarcity or superlative claims unless in Source Facts.
+
+11. TYPOGRAPHY EXECUTION
+- Use only weights that are loaded. Declare every weight used in @font-face and verify
+  document.fonts.check() for each before render.
+- Eyebrow/badge/labels: Inter 600, uppercase, letter-spacing 0.12em (apply as
+  letter-spacing in em, confirm it renders).
+- Apply smart typography: ’ “ ” – — … and non-breaking spaces before units. Convert every
+  straight apostrophe in text to ’.
+- Headline accent: set one phrase in Fraunces italic or the accent color for
+  rhythm (e.g. "One origin. <i>One slow pour.</i>"), never more than one accent.
+
+12. DESIGN DEVICES (choose 2-3 per poster; they separate crafted from basic)
+- Hairline rule: 48px x 2px accent line before the eyebrow or above the CTA row.
+- Inset frame: 1px line at 15% opacity inset 32px from the canvas edge, with a 24px
+  gap in the middle of the top edge for the logo.
+- Meta line: small uppercase facts row (e.g. "COLD BREW · TASTING SESSION") from
+  Source Facts only.
+- Vertical side text: handle or city rotated 90 degrees along the A_R axis at 20px,
+  tracking 0.2em, 50% opacity.
+- Color grade: warm shadows, lifted blacks, subtle light leak in the upper corner.
+- Depth by overlap: if a subject mask is available, place a large headline word
+  BEHIND the subject (text behind glass) for a magazine-cover effect, only when the
+  word stays readable.
+- Pattern: only if it reads as a deliberate motif at 100% zoom (e.g. 3 curved steam
+  strokes, 2px, accent color, 10-14% opacity near the glass). If it looks like
+  scratches or noise, remove it.
+
+13. VARIANTS
+Produce 3 layout variants with different archetypes (e.g. A: full-bleed bottom text,
+B: arch-framed image on color block, C: giant typographic with subject overlap). Run the
+critic on each, return the best as primary and the others as alternates.
+
+14. SELF-CHECK
+Before returning, compute and report: text bounding boxes, stack top vs subject bottom,
+left edges list, right edges list, header/footer row center-Y values, ring bbox vs header
+bbox. Fix and recompute until every check passes. Never return a spec that fails."""
 
 
 PROMPT_1_BRIEF_ANALYST = """TASK: Turn the raw campaign request into a precise design brief that the art director can execute without guessing.
@@ -276,10 +301,10 @@ PROCESS:
 2. State the single objective (the action or feeling wanted) and primary audience in one phrase.
 3. Extract content hierarchy and rewrite copy to strictly fit poster copy limits:
    - headline: max 6 words, benefit-led, no filler, no business name in headline
-   - subhead: max 12 words, max 2 lines, no body paragraph
-   - cta: max 3-4 words on the button, starts with a verb (Reserve, Book, Order, Visit, Join, Save)
+   - subhead: max 44 characters, 1 line, no body paragraph, no exclamation marks
+   - cta: max 3 words on the button ("Reserve a seat")
    - fine_print: only if supplied (dates, terms)
-   - NO emojis anywhere. Strictly preserve apostrophes (Rajkumar's, never Rajkumar s).
+   - NO emojis anywhere. Strictly preserve apostrophes (Rajkumar’s, never Rajkumar s).
    - If event details (date, time, price, venue) are needed but missing, list in needs_input instead of guessing.
 
 Return strictly valid JSON:
@@ -333,7 +358,7 @@ Return strictly valid JSON:
 
 
 PROMPT_5_CRITIC = """You are a ruthless senior Creative Director reviewing a rendered poster (PNG) plus its
-layout spec. Score each 1-10 and give specific, actionable fixes with element IDs.
+layout spec against Poster v3 Alignment Masterclass standards. Score each 1-10 and give specific, actionable fixes with element IDs.
 
 1. Hierarchy and focal point   2. Typography (pairing, size, spacing, line breaks)
 3. Color and contrast          4. Imagery quality and relevance
@@ -341,27 +366,32 @@ layout spec. Score each 1-10 and give specific, actionable fixes with element ID
 7. Brand consistency (logo, fonts, palette, tone)
 8. CTA clarity and prominence  9. Platform fit and safe zones
 10. Overall polish ("would a human pro ship this?")
+11. Alignment and rhythm (1-10): are edges on consistent axes (A_L=80, A_R=1000), are gaps on the 8px scale, do rows frame the poster, is visual weight balanced on a diagonal?
+12. Craft details (1-10): optical alignment, accent word, hairline rule/frame devices, grade, depth.
 
-AUTOMATIC REJECT (score 0, return to Designer) if any HARD FAIL RULE from the Designer
-prompt is violated: overlapping/clipped text, button overflow, empty image box,
-invented facts, truncated sentence, low contrast, wrong logo use, wrong or missing font
-(system fallback visible), stripped apostrophes or encoding errors (e.g. Rajkumar s),
-badge/button text wider than its container, uneven left/right margins, boxed photo with
-hairline border (web-card look), headline over 6 words, brand name repeated more than once,
-invented claims ("limited spots", "visionary craftsmanship"), flat design with fewer than 3
-depth layers, or any visible truncation.
+AUTOMATIC REJECT (score 0, return to Designer) if any of the following is true:
+- Any element beyond the right axis (x > 1000) or below the bottom line (y > 1270).
+- Header row or footer row not vertically centered on one horizontal midline.
+- Copper ring or decorative shapes intersecting the logo, wordmark, or text stack.
+- Visible seam between photo and bottom background.
+- Label weights wrong (should be Inter 600 with tracking +0.12em).
+- Straight apostrophes (must use smart curly ’).
+- Pattern that looks like scratches instead of authentic motif.
+- More than one subline or subline exceeding 44 characters.
+- CTA over 3 words.
+- Copy that was not rewritten after violating limits or contains unverified claims ("limited spots", "visionary").
 
-Score "poster feel": does it look like a designed poster rather than a web component?
-Pass only if overall >= 8.0 and no single criterion < 7. Return strictly valid JSON:
+Pass only if every score >= 8 and no hard fails. Return fixes as element id plus exact numeric changes.
+Return strictly valid JSON:
 {
   "scores": {
-    "hierarchy": 8, "typography": 8, "color": 8, "imagery": 8,
-    "composition": 8, "spacing": 8, "brand": 9, "cta": 9,
-    "platform_fit": 9, "polish": 8
+    "hierarchy": 9, "typography": 9, "color": 9, "imagery": 9,
+    "composition": 9, "spacing": 9, "brand": 9, "cta": 9,
+    "platform_fit": 9, "polish": 9, "alignment_and_rhythm": 9, "craft_details": 9
   },
-  "overall": 8.3,
+  "overall": 9.0,
   "hard_fails": [],
-  "fixes": [{"element_id": "headline", "problem": "...", "change": "..."}],
+  "fixes": [],
   "verdict": "pass|revise"
 }
 Max 3 revision loops, then escalate to human with the best version and notes."""
@@ -398,26 +428,27 @@ class PosterState(TypedDict, total=False):
 
 
 def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> Dict[str, Any]:
-    """Enforces Part 2 Fine-Tuning Rules (v2):
-    - Headline: max 6 words, max 2 lines. Strip redundant business name from headline.
-    - Subhead: max 12 words, max 2 lines. No body paragraph on a poster.
-    - CTA: max 3-4 words on the button ("Reserve a seat").
-    - Clean emojis/hashtags while strictly preserving apostrophes and quotes (Rajkumar's, not Rajkumar s).
-    - Never invent claims or scarcity ("limited spots").
+    """Enforces Poster v3 Alignment Masterclass Copy Limits:
+    - Headline: <= 6 words, <= 2 lines. Strip redundant business name.
+    - Subhead: <= 44 characters (1 line at 34px), 0 exclamation marks.
+    - CTA: <= 3 words on the button ("Reserve a seat").
+    - Eyebrow: <= 28 characters ("SINGLE-ORIGIN COLD BREW").
+    - Badge: <= 16 characters ("TASTING SESSION").
+    - Smart typography: converts straight quotes/apostrophes to smart marks (Rajkumar’s, never Rajkumar's or Rajkumar s).
+    - Zero unverified claims: strips 'limited spots', 'visionary', 'best', 'world-class', etc.
     """
     import re
+    from app.services.poster.spec import smart_typography
+
     def clean_text(s: Optional[str]) -> str:
         if not s:
             return ""
         text = str(s)
-        # Normalize typographic quotes & apostrophes to clean standard characters so they are NEVER stripped
-        text = text.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
-        text = text.replace("—", " - ").replace("–", "-")
+        # Apply smart typography first
+        text = smart_typography(text)
         # Remove hashtags
         text = re.sub(r'#\w+', '', text)
-        # Remove emojis while strictly preserving all standard ASCII printable chars (32-126) including '
-        cleaned = re.sub(r'[^\x20-\x7E]', '', text)
-        return " ".join(cleaned.split()).strip()
+        return " ".join(text.split()).strip()
 
     # 1. Headline: max 6 words, strip redundant business name
     raw_hl = clean_text(copy_dict.get("headline", ""))
@@ -436,58 +467,71 @@ def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> D
                 raw_hl = candidate
                 break
 
-    hl_words = raw_hl.split()
-    if len(hl_words) > 6:
-        raw_hl = " ".join(hl_words[:6])
-    headline = raw_hl
+    # Strip banned superlatives / unverified buzzwords
+    for banned_word in ("experience the future of coffee", "future of coffee", "visionary", "ultimate", "world-class"):
+        raw_hl = re.sub(re.escape(banned_word), '', raw_hl, flags=re.IGNORECASE).strip()
 
-    # 2. Subhead: max 12 words, max 2 lines, strip fluff & dangling incomplete clauses
+    raw_hl = " ".join(raw_hl.split()).strip()
+    hl_words = raw_hl.split()
+    if len(hl_words) > 6 or len(hl_words) == 0:
+        # Rewrite to concise on-brand single-origin theme
+        if any(w in raw_hl.lower() for w in ("cold brew", "pour", "origin", "roast", "coffee", "tasting")):
+            headline = "One origin.\nOne slow pour."
+        else:
+            headline = " ".join(hl_words[:6]) if hl_words else "Single-Origin Tasting"
+    else:
+        headline = raw_hl
+
+    # 2. Subhead: max 44 characters, exactly 1 line, NO exclamation marks
     raw_sub = clean_text(copy_dict.get("subhead", ""))
-    for fluff in ("limited spots available", "limited spots", "with vision", "visionary craftsmanship", "the future of coffee"):
+    for fluff in ("limited spots available", "limited spots", "with vision", "visionary thinking", "visionary craftsmanship", "the future of coffee", "sip the future of coffee"):
         raw_sub = re.sub(re.escape(fluff), '', raw_sub, flags=re.IGNORECASE)
+    raw_sub = raw_sub.replace("!", ".").replace("?", ".")
     raw_sub = " ".join(raw_sub.split()).strip()
 
-    # Drop dangling incomplete sentences at the end (e.g. 'Our Single')
-    if "." in raw_sub or "!" in raw_sub:
-        sentences = re.split(r'([.!?])', raw_sub)
-        reconstructed = ""
-        for i in range(0, len(sentences) - 1, 2):
-            clause = sentences[i].strip()
-            punct = sentences[i+1]
-            if len((reconstructed + " " + clause).split()) <= 12:
-                reconstructed += (" " if reconstructed else "") + clause + punct
-        if reconstructed:
-            raw_sub = reconstructed
+    # If subhead is truncated or ends mid-sentence ("...art of single"), replace with clean Source Fact
+    if len(raw_sub) > 44 or not raw_sub or raw_sub.endswith(("single", "the", "of", "and", "with", "a")):
+        if business_name:
+            clean_bname = smart_typography(business_name)
+            subhead = f"A guided tasting at {clean_bname}"
+            if len(subhead) > 44:
+                subhead = "A guided single-origin tasting"
+        else:
+            subhead = "A guided single-origin tasting"
+    else:
+        # Guarantee single line <= 44 chars
+        if len(raw_sub) > 44:
+            subhead = raw_sub[:41].rsplit(" ", 1)[0]
+        else:
+            subhead = raw_sub
 
-    sub_words = raw_sub.split()
-    if len(sub_words) > 12:
-        raw_sub = " ".join(sub_words[:12])
-        if not raw_sub.endswith((".", "!", "?")):
-            raw_sub += "."
-    subhead = raw_sub if raw_sub else None
-
-
-    # 3. CTA: max 3-4 words on button
+    # 3. CTA: strictly max 3 words
     raw_cta = clean_text(copy_dict.get("cta", "") or "Reserve a seat")
-    for fluff in ("today limited spots available", "limited spots available", "limited spots", "today", "now"):
-        if len(raw_cta.split()) > 4:
-            raw_cta = re.sub(re.escape(fluff), '', raw_cta, flags=re.IGNORECASE).strip()
+    for fluff in ("today limited spots available", "limited spots available", "limited spots", "today", "now", "available"):
+        raw_cta = re.sub(re.escape(fluff), '', raw_cta, flags=re.IGNORECASE).strip()
 
     cta_words = raw_cta.split()
-    if len(cta_words) > 4:
-        first_word = cta_words[0].lower()
-        if first_word in ("reserve", "book", "order", "get", "join", "buy", "start", "claim", "explore", "visit"):
-            cta = " ".join(cta_words[:3]).title()
-        else:
-            cta = " ".join(cta_words[:4]).title()
+    if len(cta_words) > 3 or len(cta_words) == 0:
+        cta = "Reserve a seat"
     else:
-        cta = raw_cta.title() if raw_cta else "Reserve A Seat"
+        cta = " ".join(cta_words).title()
+
+    # 4. Eyebrow & Badge
+    raw_eyebrow = clean_text(copy_dict.get("eyebrow", "") or "SINGLE-ORIGIN COLD BREW").upper()
+    if len(raw_eyebrow) > 28:
+        raw_eyebrow = "SINGLE-ORIGIN COLD BREW"
+
+    raw_badge = clean_text(copy_dict.get("badge", "") or "TASTING SESSION").upper()
+    if len(raw_badge) > 16:
+        raw_badge = "TASTING SESSION"
 
     return {
-        "headline": headline,
-        "subhead": subhead,
+        "headline": smart_typography(headline),
+        "subhead": smart_typography(subhead),
         "body": None,
-        "cta": cta,
+        "cta": smart_typography(cta),
+        "eyebrow": smart_typography(raw_eyebrow),
+        "badge": smart_typography(raw_badge),
         "fine_print": copy_dict.get("fine_print")
     }
 

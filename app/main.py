@@ -1756,19 +1756,32 @@ def render_custom_poster_spec(spec: PosterSpec):
 @app.post("/api/poster/render")
 async def render_custom_poster(req: PosterRenderRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)):
     p_color = req.primary_color or req.brand_color or "#6366F1"
+    b_name = req.business_name or "Your Business"
+
+    # Strictly enforce Poster v3 Alignment Masterclass copy limits
+    from app.agents.poster_designer import tighten_poster_copy, poster_design_agent
+    clean_copy = tighten_poster_copy({
+        "headline": req.title,
+        "subhead": req.subtitle,
+        "cta": req.cta or "Learn More",
+        "eyebrow": "SINGLE-ORIGIN COLD BREW" if "cold brew" in (req.title or "").lower() else "FEATURED ANNOUNCEMENT",
+        "badge": "TASTING SESSION" if "tasting" in (req.title or "").lower() else "SPECIAL EVENT"
+    }, business_name=b_name)
+
+    safe_title = clean_copy["headline"]
+    safe_subtitle = clean_copy["subhead"]
+    safe_cta = clean_copy["cta"]
 
     # Invoke full LangGraph Poster Design Agent
-    from app.agents.poster_designer import poster_design_agent
-
     try:
         graph_state = await poster_design_agent.ainvoke({
             "request": {
-                "title": req.title,
-                "subtitle": req.subtitle,
+                "title": safe_title,
+                "subtitle": safe_subtitle,
                 "theme": req.theme,
                 "archetype": req.archetype or "hero-text",
-                "cta": req.cta or "Learn More",
-                "business_name": req.business_name or "Your Business",
+                "cta": safe_cta,
+                "business_name": b_name,
                 "phone": req.phone,
                 "address": req.address,
                 "website": req.website,
@@ -1806,14 +1819,14 @@ async def render_custom_poster(req: PosterRenderRequest, user: Optional[Authenti
             "events": graph_state.get("events", [])
         }
     except Exception as e:
-        # Fallback to direct archetype template
+        # Fallback to direct archetype template with guaranteed safe copy
         spec = get_archetype_template(
             archetype=req.archetype or "hero-text",
-            headline=req.title,
-            subhead=req.subtitle,
+            headline=safe_title,
+            subhead=safe_subtitle,
             primary_color=p_color,
-            cta=req.cta or "Learn More",
-            business_name=req.business_name or "Your Business"
+            cta=safe_cta,
+            business_name=b_name
         )
         report = lint_poster_spec(spec)
         result = render_poster_spec(spec)

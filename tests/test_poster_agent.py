@@ -234,3 +234,110 @@ def test_phase_6_telemetry_and_learning_loop(tmp_path):
     assert dataset[0]["human_status"] == "approved"
 
 
+def test_poster_v3_copy_validator_and_smart_typography():
+    """Verify Poster v3 strict copy validation and curly apostrophe preservation."""
+    from app.services.poster.spec import PosterCopy, smart_typography
+    import pytest
+
+    # Smart typography
+    res = smart_typography("Rajkumar's Coffee Studio")
+    assert "Rajkumar’s" in res
+    assert "’" in res
+
+    # Valid copy
+    valid_copy = PosterCopy(
+        eyebrow="SINGLE-ORIGIN COLD BREW",
+        headline="One origin. One slow pour.",
+        subline="A guided tasting at Rajkumar’s Coffee Studio",
+        cta="Reserve a seat",
+        badge="TASTING SESSION"
+    )
+    assert valid_copy.cta == "Reserve a seat"
+
+    # Reject headline > 6 words
+    with pytest.raises(ValueError, match="headline > 6 words"):
+        PosterCopy(
+            eyebrow="TAG",
+            headline="Experience the Future of Coffee at Rajkumar's Coffee Studio",
+            subline="Short subline",
+            cta="Reserve seat",
+            badge="BADGE"
+        )
+
+    # Reject subline > 44 characters or containing '!'
+    with pytest.raises(ValueError, match="subline too long"):
+        PosterCopy(
+            eyebrow="TAG",
+            headline="Cold Brew",
+            subline="Sip the future of coffee at Rajkumar's Coffee Studio with visionary thinking and craftsmanship",
+            cta="Reserve",
+            badge="BADGE"
+        )
+
+    # Reject CTA > 3 words
+    with pytest.raises(ValueError, match="cta > 3 words"):
+        PosterCopy(
+            eyebrow="TAG",
+            headline="Cold Brew",
+            subline="A guided tasting session.",
+            cta="Reserve your tasting seat today",
+            badge="BADGE"
+        )
+
+    # Reject unverified claims
+    with pytest.raises(ValueError, match="unverified claim"):
+        PosterCopy(
+            eyebrow="TAG",
+            headline="Cold Brew",
+            subline="Limited spots available for tasting",
+            cta="Book Now",
+            badge="BADGE"
+        )
+
+
+def test_poster_v3_coffee_poster_alignment_and_geometry():
+    """Verify coffee poster renders with Poster v3 Alignment Masterclass geometry and 0 QA errors."""
+    from app.agents.poster_designer import tighten_poster_copy
+    from app.services.poster.archetypes import get_archetype_template
+    from app.services.poster.renderer import render_poster_spec
+
+    # User's input that previously failed
+    raw_title = "Experience the Future of Coffee: Single Origin Cold Brew at Rajkumar's Coffee"
+    raw_subtitle = "Sip the future of coffee! At Rajkumar's Coffee Studio we blend visionary thinking with the meticulous art of single"
+    raw_cta = "Reserve your tasting seat today - limited spots available."
+    b_name = "Rajkumar's Coffee Studio"
+
+    # Step 1: Tighten copy
+    tightened = tighten_poster_copy({
+        "headline": raw_title,
+        "subhead": raw_subtitle,
+        "cta": raw_cta,
+        "eyebrow": "SINGLE-ORIGIN COLD BREW",
+        "badge": "TASTING SESSION"
+    }, business_name=b_name)
+
+    assert len(tightened["headline"].split()) <= 6
+    assert len(tightened["subhead"]) <= 44
+    assert len(tightened["cta"].split()) <= 3
+    assert "’" in tightened["subhead"]
+    assert "!" not in tightened["subhead"]
+
+    # Step 2: Render spec
+    spec = get_archetype_template(
+        archetype="hero-text",
+        headline=tightened["headline"],
+        subhead=tightened["subhead"],
+        primary_color="#E8890C",
+        cta=tightened["cta"],
+        business_name=b_name
+    )
+
+    result = render_poster_spec(spec)
+    assert result.width == 1080
+    assert result.height == 1350
+    assert result.measurements.get("status") == "poster_v3_alignment_masterclass_passed"
+    assert len(result.measurements.get("qa_errors", [])) == 0
+    assert result.measurements.get("header_midline_y") == 104
+    assert result.measurements.get("footer_midline_y") == 1230
+
+

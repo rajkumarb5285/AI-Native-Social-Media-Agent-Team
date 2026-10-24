@@ -3,8 +3,70 @@
 Enforces deterministic layouts, coordinates, type scales, and metadata
 as specified in Section 3 (Prompt 3) and Section 4 of the Poster Design Agent pack.
 """
+import re
 from typing import List, Optional, Literal, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator
+
+
+def smart_typography(s: str) -> str:
+    """Converts straight quotes, apostrophes, and hyphens to smart typographic marks.
+    Preserves and converts apostrophes (Rajkumar's -> Rajkumar’s).
+    """
+    if not s:
+        return ""
+    text = str(s)
+    # Smart apostrophes and single quotes (e.g. Rajkumar's -> Rajkumar’s)
+    text = re.sub(r"(\w)'(\w)", r"\1’\2", text)
+    text = re.sub(r"(^|\s)'(\w)", r"\1‘\2", text)
+    text = re.sub(r"(\w)'(\s|$|[.,!?;:])", r"\1’\2", text)
+    # Smart double quotes
+    text = re.sub(r'(^|\s)"(\w)', r'\1“\2', text)
+    text = re.sub(r'(\w)"(\s|$|[.,!?;:])', r'\1”\2', text)
+    # Dashes
+    text = text.replace(" - ", " – ").replace(" -- ", " — ")
+    return text
+
+
+class PosterCopy(BaseModel):
+    """Pydantic validator enforcing strict Poster Copy Limits (Poster v3 Masterclass)."""
+    eyebrow: str = ""
+    headline: str = ""
+    subline: str = ""
+    cta: str = ""
+    badge: str = ""
+
+    @field_validator("headline")
+    @classmethod
+    def headline_ok(cls, v: str) -> str:
+        words = re.findall(r"\w+", v)
+        if len(words) > 6:
+            raise ValueError(f"headline > 6 words ({len(words)} words)")
+        return v
+
+    @field_validator("subline")
+    @classmethod
+    def sub_ok(cls, v: str) -> str:
+        if len(v) > 44 or "!" in v:
+            raise ValueError("subline too long (> 44 chars) or contains '!'")
+        return v
+
+    @field_validator("cta")
+    @classmethod
+    def cta_ok(cls, v: str) -> str:
+        if len(v.split()) > 3:
+            raise ValueError(f"cta > 3 words ({len(v.split())} words)")
+        return v
+
+    @field_validator("*")
+    @classmethod
+    def no_banned(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return v
+        banned = ["limited", "best", "visionary", "world-class", "ultimate"]
+        for b in banned:
+            if b in v.lower():
+                raise ValueError(f"unverified claim '{b}'; must be in Source Facts")
+        return v
 
 
 class CanvasConfig(BaseModel):
