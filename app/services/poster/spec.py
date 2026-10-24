@@ -61,9 +61,19 @@ class PosterElement(BaseModel):
 
 class OverlayScrim(BaseModel):
     needed: bool = False
+    enabled: Optional[bool] = None
+    type: Optional[str] = "solid"  # solid | gradient
+    color: Optional[str] = "#000000"
     from_color: Optional[str] = Field(default="#000000", alias="from")
     opacity: float = 0.0
+    blur: Optional[int] = 0
     area: Optional[Dict[str, int]] = Field(default_factory=lambda: {"x": 0, "y": 0, "w": 0, "h": 0})
+
+    def is_active(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return self.needed or self.opacity > 0.0
+
 
 
 class SelfCheck(BaseModel):

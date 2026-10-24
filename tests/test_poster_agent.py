@@ -125,3 +125,112 @@ def test_get_archetype_template_helper():
 
     quote = get_archetype_template("quote", "Outstanding work and results")
     assert quote.focal_element == "quote_text"
+
+
+@pytest.mark.asyncio
+async def test_poster_design_langgraph_pipeline_execution():
+    """Verify Poster Design Agent LangGraph pipeline executes all nodes end-to-end."""
+    from app.agents.poster_designer import poster_design_agent
+
+    initial_state = {
+        "request": {
+            "title": "Grand Diwali Gold Festival",
+            "subtitle": "Flat 25% Off Making Charges on Diamond Jewellery",
+            "business_name": "Royal Jewellers",
+            "cta": "Visit Showroom",
+            "primary_color": "#F59E0B"
+        }
+    }
+
+    final_state = await poster_design_agent.ainvoke(initial_state)
+
+    assert "png_base64" in final_state
+    assert final_state["png_base64"].startswith("data:image/png;base64,")
+    assert "spec" in final_state
+    assert "critique" in final_state
+    assert final_state["critique"]["overall"] >= 8.0
+    assert final_state["lint"]["clean"] is True
+
+
+def test_phase_4_knowledge_rule_cards_and_cultural_festivals():
+    """Verify Phase 4 atomic rule cards and cultural festival dictionary."""
+    from app.services.poster.knowledge import (
+        search_rule_cards, get_cultural_rules, get_reference_briefs_by_type
+    )
+
+    # Search rule cards
+    contrast_rules = search_rule_cards("contrast WCAG")
+    assert len(contrast_rules) > 0
+    assert any(r.id == "RULE-CONTRAST-4.5" for r in contrast_rules)
+
+    # Cultural festival rules for Diwali
+    diwali = get_cultural_rules("Diwali Dhamaka")
+    assert diwali is not None
+    assert diwali.name == "Diwali (Deepavali)"
+    assert any("diya" in m for m in diwali.authentic_motifs)
+    assert len(diwali.taboos) > 0
+
+    # Reference briefs
+    briefs = get_reference_briefs_by_type("offer_promo")
+    assert len(briefs) > 0
+
+
+def test_phase_5_background_prompt_and_scrim_compositor():
+    """Verify Phase 5 negative-space background prompt and scrim compositing."""
+    from app.services.poster.image_gen import (
+        formulate_background_prompt, apply_scrim_overlay
+    )
+    from app.services.poster.spec import OverlayScrim
+    from PIL import Image
+
+    # Negative-space prompt formulation
+    res = formulate_background_prompt(
+        concept="Luxury watch product poster",
+        archetype="hero-text",
+        subject="mechanical chronograph",
+        tone="minimalist elegance"
+    )
+    assert "text" in res.negative_prompt
+    assert "words" in res.negative_prompt
+    assert "clean" in res.positive_prompt.lower()
+
+    # Scrim overlay
+    canvas = Image.new("RGB", (200, 200), (255, 255, 255))
+    scrim = OverlayScrim(enabled=True, type="solid", color="#000000", opacity=0.5)
+    composited = apply_scrim_overlay(canvas, scrim)
+    # The middle pixel should be darkened
+    r, g, b = composited.getpixel((100, 100))
+    assert r < 200 and g < 200 and b < 200
+
+
+def test_phase_6_telemetry_and_learning_loop(tmp_path):
+    """Verify Phase 6 telemetry logging, human sign-off, and fine-tuning dataset export."""
+    from app.services.poster.telemetry import (
+        log_poster_generation, record_human_feedback, export_training_dataset
+    )
+
+    test_db = str(tmp_path / "test_agent_runs.db")
+
+    run_id = log_poster_generation(
+        brief={"headline": "Special Offer"},
+        archetype="hero-text",
+        initial_spec={"elements": []},
+        final_spec={"elements": [{"id": "headline", "x": 64, "y": 64}]},
+        scores={"overall": 8.8, "hierarchy": 9},
+        iterations=1,
+        verdict="pass",
+        db_path=test_db
+    )
+    assert run_id.startswith("post_")
+
+    # Record human approval
+    success = record_human_feedback(run_id, "approved", db_path=test_db)
+    assert success is True
+
+    # Export dataset
+    dataset = export_training_dataset(db_path=test_db, min_score=8.0, only_approved=True)
+    assert len(dataset) == 1
+    assert dataset[0]["id"] == run_id
+    assert dataset[0]["human_status"] == "approved"
+
+
