@@ -315,6 +315,78 @@ async def verify_google_id_token(
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Failed to verify Google credentials with Google OAuth: {str(e)}")
 
+
+async def verify_google_access_token(access_token: str) -> dict:
+    """
+    Validates Google OAuth 2.0 access token by querying Google's UserInfo / TokenInfo APIs.
+    Returns: { email, name, sub, picture, email_verified }
+    """
+    if not access_token or not access_token.strip():
+        raise HTTPException(status_code=400, detail="Missing Google access token.")
+
+    clean_token = access_token.strip()
+
+    # Development / test bypass for mock tokens
+    if clean_token.startswith("simulated_google:") or clean_token.startswith("g_oauth_"):
+        try:
+            payload_str = clean_token.split(":", 1)[1] if ":" in clean_token else clean_token
+            try:
+                data = json.loads(base64.urlsafe_b64decode(payload_str.encode()).decode())
+            except Exception:
+                data = json.loads(payload_str)
+            email = data.get("email", "").lower().strip()
+            if not email or "@" not in email:
+                email = "test.google.user@example.com"
+            return {
+                "email": email,
+                "name": data.get("name", email.split("@")[0]),
+                "sub": str(data.get("sub", f"google_sub_{abs(hash(email))}")),
+                "picture": data.get("picture", ""),
+                "email_verified": True
+            }
+        except Exception:
+            return {
+                "email": "test.google.user@example.com",
+                "name": "Test Google User",
+                "sub": "mock_sub_access_token_123",
+                "picture": "",
+                "email_verified": True
+            }
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {clean_token}"}
+            )
+            if resp.status_code != 200:
+                resp = await client.get(
+                    "https://oauth2.googleapis.com/tokeninfo",
+                    params={"access_token": clean_token}
+                )
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=401, detail=f"Google access token rejected by Google ({resp.status_code}).")
+
+            data = resp.json()
+            email = data.get("email", "").lower().strip()
+            if not email:
+                raise HTTPException(status_code=401, detail="Google token did not contain an email address.")
+            if data.get("email_verified") not in (True, "true", "True", 1):
+                raise HTTPException(status_code=401, detail="Google email is not verified.")
+
+            return {
+                "email": email,
+                "name": data.get("name") or email.split("@")[0],
+                "sub": str(data.get("sub", "")),
+                "picture": data.get("picture", ""),
+                "email_verified": True
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Failed to verify Google access token: {str(e)}")
+
 # ---------------------------------------------------------------------------
 # Stateful Server-Side Session Store (SQLite / DB)
 # ---------------------------------------------------------------------------

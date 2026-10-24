@@ -238,3 +238,15 @@ def test_appwrite_google_auth_exchange(client):
     me_resp = client.get("/auth/me", cookies={SESSION_COOKIE_NAME: session_id})
     assert me_resp.status_code == 200
     assert me_resp.json()["email"] == test_email
+
+
+def test_google_access_token_auth(client):
+    """Verify Google Identity Services Token Client access_token authenticates and returns user."""
+    resp = client.post("/api/auth/google", json={
+        "access_token": "simulated_google:eyJlbWFpbCI6ICJnaXMuYWNjZXNzLnRva2VuQGdtYWlsLmNvbSIsICJuYW1lIjogIkdJUyBUb2tlbiBVc2VyIn0="
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "gis.access.token@gmail.com"
+

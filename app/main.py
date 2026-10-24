@@ -67,6 +67,7 @@ class AuthLoginRequest(BaseModel):
 class AuthGoogleRequest(BaseModel):
     id_token: Optional[str] = None
     credential: Optional[str] = None
+    access_token: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
 
@@ -141,7 +142,7 @@ from app.security.auth import (
     get_current_user, get_optional_current_user, require_role, AuthenticatedUser, create_jwt, hash_password, verify_password,
     validate_password_strength, create_mfa_challenge_token, verify_mfa_challenge_token,
     generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp_code,
-    generate_numeric_otp, verify_google_id_token, generate_pkce_pair, generate_oauth_state,
+    generate_numeric_otp, verify_google_id_token, verify_google_access_token, generate_pkce_pair, generate_oauth_state,
     generate_nonce, is_safe_redirect_url, create_db_session, get_session_user, destroy_db_session,
     rotate_db_session, SESSION_COOKIE_NAME
 )
@@ -995,7 +996,12 @@ async def google_auth(req: AuthGoogleRequest):
     name = None
     google_sub = None
 
-    if token_to_verify:
+    if req.access_token:
+        google_profile = await verify_google_access_token(req.access_token)
+        email = google_profile["email"]
+        name = google_profile["name"]
+        google_sub = google_profile["sub"]
+    elif token_to_verify:
         google_profile = await verify_google_id_token(token_to_verify)
         email = google_profile["email"]
         name = google_profile["name"]

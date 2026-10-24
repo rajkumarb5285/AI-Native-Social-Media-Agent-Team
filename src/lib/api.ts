@@ -168,21 +168,17 @@ export const authService = {
     return null;
   },
 
+  async verifyGoogleAccessToken(accessToken: string) {
+    return fetchApi("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+  },
+
   initiateGoogleLogin() {
     if (typeof window === "undefined") return;
-
-    if (appwriteAccount) {
-      const successUrl = `${window.location.origin}/?appwrite_auth=success`;
-      const failureUrl = `${window.location.origin}/?auth_error=Google+login+failed`;
-      try {
-        appwriteAccount.createOAuth2Session(OAuthProvider.Google, successUrl, failureUrl);
-        return;
-      } catch (err) {
-        console.warn("Appwrite OAuth redirect fallback:", err);
-      }
-    }
-    // Direct Server-Side Authorization Code flow with PKCE fallback
-    window.location.href = `${API_BASE}/auth/google/login`;
+    const origin = encodeURIComponent(window.location.origin);
+    window.location.href = `${API_BASE}/auth/google/login?redirect_origin=${origin}`;
   },
 };
 

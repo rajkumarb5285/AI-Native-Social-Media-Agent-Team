@@ -109,12 +109,57 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
   if (!isOpen) return null;
 
   const handleGoogleLogin = () => {
-    const google = (window as any).google;
-    if (google?.accounts?.id) {
-      google.accounts.id.prompt();
-    } else {
-      authService.initiateGoogleLogin();
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const google = typeof window !== "undefined" ? (window as any).google : null;
+    const clientId =
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+      "461486698811-7gmaavot3f8u6tdpdr9lhqe0veiccuiv.apps.googleusercontent.com";
+
+    // 1. Preferred Modern Flow: Google Identity Services Token Client Popup
+    if (google?.accounts?.oauth2?.initTokenClient) {
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: "openid email profile",
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              setIsLoading(false);
+              if (tokenResponse.error !== "popup_closed_by_user") {
+                setErrorMessage(`Google sign-in error: ${tokenResponse.error_description || tokenResponse.error}`);
+              }
+              return;
+            }
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await authService.verifyGoogleAccessToken(tokenResponse.access_token);
+                if (res.mfa_required) {
+                  setChallengeToken(res.challenge_token);
+                  setMode("mfa_challenge");
+                  setCountdown(300);
+                } else {
+                  setAuthToken(res.access_token);
+                  onSuccess(res.user);
+                  onClose();
+                }
+              } catch (err: any) {
+                setErrorMessage(err.message || "Google authentication failed");
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          },
+        });
+        client.requestAccessToken({ prompt: "select_account" });
+        return;
+      } catch (err) {
+        console.warn("TokenClient popup error, falling back:", err);
+      }
     }
+
+    // 2. Direct server redirect fallback
+    authService.initiateGoogleLogin();
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
