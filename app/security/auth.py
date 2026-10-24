@@ -222,6 +222,16 @@ async def verify_google_id_token(
 
     clean_token = token.strip()
     client_id = expected_audience or os.getenv("GOOGLE_CLIENT_ID", "").strip() or None
+    if not client_id:
+        try:
+            import sqlite3
+            db_path = os.getenv("DATABASE_PATH", "./agent_runs.db")
+            with sqlite3.connect(db_path) as con:
+                row = con.execute("SELECT value FROM system_settings WHERE key='google_client_id'").fetchone()
+                if row and row[0]:
+                    client_id = row[0].strip()
+        except Exception:
+            pass
 
     # Development / test bypass for mock tokens
     if clean_token.startswith("simulated_google:") or clean_token.startswith("g_oauth_"):

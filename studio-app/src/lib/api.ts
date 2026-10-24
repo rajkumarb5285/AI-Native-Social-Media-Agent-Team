@@ -1,6 +1,10 @@
 import { Client, Account, OAuthProvider } from "appwrite";
 
-const APPWRITE_ENDPOINT = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
+let rawEndpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
+if (rawEndpoint.includes("cloud.appwrite.io") && !rawEndpoint.includes("fra.cloud.appwrite.io")) {
+  rawEndpoint = "https://fra.cloud.appwrite.io/v1";
+}
+const APPWRITE_ENDPOINT = rawEndpoint;
 const APPWRITE_PROJECT_ID = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || process.env.NEXT_PUBLIC_APPWRITE_PROJECT || "6adb9d5e003b622dd710";
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -124,6 +128,46 @@ export const authService = {
     });
   },
 
+  async verifyGoogleCredential(credential: string) {
+    const res = await fetchApi("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    });
+    if (res.access_token) {
+      setAuthToken(res.access_token);
+      if (res.user) {
+        localStorage.setItem("agent_team_user", JSON.stringify(res.user));
+      }
+    }
+    return res;
+  },
+
+  async handleAppwriteCallback() {
+    if (!appwriteAccount) return null;
+    try {
+      const apwUser = await appwriteAccount.get();
+      const res = await fetchApi("/api/auth/appwrite", {
+        method: "POST",
+        body: JSON.stringify({
+          appwrite_user_id: apwUser.$id,
+          email: apwUser.email,
+          name: apwUser.name,
+          email_verified: apwUser.emailVerification,
+        }),
+      });
+      if (res.access_token) {
+        setAuthToken(res.access_token);
+        if (res.user) {
+          localStorage.setItem("agent_team_user", JSON.stringify(res.user));
+        }
+        return res.user;
+      }
+    } catch (err) {
+      console.warn("Appwrite Google exchange error:", err);
+    }
+    return null;
+  },
+
   initiateGoogleLogin() {
     if (typeof window === "undefined") return;
 
@@ -141,6 +185,7 @@ export const authService = {
     window.location.href = `${API_BASE}/auth/google/login`;
   },
 };
+
 
 // ---------------------------------------------------------------------------
 // Agent Studio & Campaign Service

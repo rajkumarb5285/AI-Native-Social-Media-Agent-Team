@@ -38,10 +38,83 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     return () => clearInterval(timer);
   }, [mode, countdown]);
 
+  React.useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
+    const clientId =
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+      "461486698811-7gmaavot3f8u6tdpdr9lhqe0veiccuiv.apps.googleusercontent.com";
+
+    const setupGsi = () => {
+      const google = (window as any).google;
+      if (!google?.accounts?.id) return;
+
+      try {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: any) => {
+            if (!response?.credential) return;
+            setIsLoading(true);
+            setErrorMessage(null);
+            try {
+              const res = await authService.verifyGoogleCredential(response.credential);
+              if (res.mfa_required) {
+                setChallengeToken(res.challenge_token);
+                setMode("mfa_challenge");
+                setCountdown(300);
+              } else {
+                setAuthToken(res.access_token);
+                onSuccess(res.user);
+                onClose();
+              }
+            } catch (err: any) {
+              setErrorMessage(err.message || "Google authentication failed");
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        });
+
+        const container = document.getElementById("googleSignInContainer");
+        if (container) {
+          container.innerHTML = "";
+          google.accounts.id.renderButton(container, {
+            theme: "filled_blue",
+            size: "large",
+            width: 340,
+            text: "continue_with",
+            shape: "rectangular",
+          });
+        }
+      } catch (e) {
+        console.warn("GSI error:", e);
+      }
+    };
+
+    if (!(window as any).google?.accounts?.id) {
+      if (!document.getElementById("google-gsi-client")) {
+        const script = document.createElement("script");
+        script.id = "google-gsi-client";
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = setupGsi;
+        document.body.appendChild(script);
+      }
+    } else {
+      setTimeout(setupGsi, 50);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleGoogleLogin = () => {
-    authService.initiateGoogleLogin();
+    const google = (window as any).google;
+    if (google?.accounts?.id) {
+      google.accounts.id.prompt();
+    } else {
+      authService.initiateGoogleLogin();
+    }
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -181,8 +254,12 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         {/* 1. Normal Login & Register Views */}
         {(mode === "login" || mode === "register") && (
           <div className="space-y-4">
+            {/* Native Google One-Tap & Sign-In Button Container */}
+            <div id="googleSignInContainer" className="w-full flex justify-center empty:hidden min-h-[44px]"></div>
+
             {/* Google OAuth Button */}
             <button
+              type="button"
               onClick={handleGoogleLogin}
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white text-stone-900 font-semibold text-sm hover:bg-stone-100 transition-all shadow-md active:scale-[0.98]"
             >

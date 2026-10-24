@@ -5,10 +5,31 @@ import Link from "next/link";
 import { Header } from "@/components/ui/header";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Calendar, ArrowRight, CheckCircle2, TrendingUp, Users, MapPin, Eye } from "lucide-react";
-import { campaignService } from "@/lib/api";
+import { campaignService, authService, setAuthToken } from "@/lib/api";
 
 export default function MissionControlPage() {
   const [isApproved, setIsApproved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.has("appwrite_auth") && params.get("appwrite_auth") === "success") {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      authService.handleAppwriteCallback().then((user) => {
+        if (user) {
+          window.dispatchEvent(new Event("storage"));
+          window.location.href = "/studio";
+        }
+      });
+    } else if (params.has("token")) {
+      const token = params.get("token")!;
+      setAuthToken(token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      window.dispatchEvent(new Event("storage"));
+      window.location.href = "/studio";
+    }
+  }, []);
 
   const handleQuickApprove = async () => {
     setIsApproved(true);
@@ -17,6 +38,7 @@ export default function MissionControlPage() {
       await campaignService.publishRun("ae438190-9546-4604-b942-55fe5d7afbbc");
     } catch (_) {}
   };
+
 
   return (
     <div className="min-h-screen bg-[#121110] text-stone-100 flex flex-col">
