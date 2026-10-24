@@ -175,6 +175,17 @@ export const authService = {
     });
   },
 
+  async quickAccess() {
+    const res = await fetchApi("/api/auth/quick-access", { method: "POST" });
+    if (res.access_token) {
+      setAuthToken(res.access_token);
+      if (res.user) {
+        localStorage.setItem("agent_team_user", JSON.stringify(res.user));
+      }
+    }
+    return res;
+  },
+
   initiateGoogleLogin() {
     if (typeof window === "undefined") return;
     const origin = encodeURIComponent(window.location.origin);
