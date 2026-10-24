@@ -1235,7 +1235,7 @@ def configure_google_oauth(req: GoogleOAuthConfigRequest):
 
 @app.get("/auth/google/login")
 @app.get("/api/auth/google/login")
-def google_oauth_login(request: Request, redirect_origin: Optional[str] = None):
+def google_oauth_login(request: Request, redirect_origin: Optional[str] = None, return_to: Optional[str] = None):
     """
     Standard Google OAuth 2.0 / OpenID Connect Authorization Code Flow with PKCE (RFC 7636).
     1. Generates cryptographic state, nonce, and PKCE code_verifier.
@@ -1250,6 +1250,15 @@ def google_oauth_login(request: Request, redirect_origin: Optional[str] = None):
     origin = redirect_origin or referer
     if not origin or not is_safe_redirect_url(origin):
         origin = str(request.base_url).rstrip("/")
+
+    # If origin is a base URL and return_to is provided, combine them safely
+    if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        if parsed.scheme and parsed.netloc:
+            origin = f"{parsed.scheme}://{parsed.netloc}{return_to}"
+        elif origin.startswith("/"):
+            origin = return_to
 
     if not client_id:
         return RedirectResponse(url=f"{origin}/?google_oauth_setup=required")
@@ -1447,14 +1456,27 @@ async def google_oauth_callback(
     audit_logger.log(user_dict["tenant_id"], user_dict["id"], "auth.google.login_success", user_dict["id"], {"email": email, "auth_method": "google_oidc_pkce"})
 
     is_secure = os.getenv("ENVIRONMENT", "development").lower() not in ("development", "test")
-    # Redirect cleanly to target_origin with success indicator (no tokens in URL)
-    clean_target = target_origin if target_origin and target_origin.startswith("/") else "/"
+    # Redirect cleanly to target_origin (include token only on cross-domain frontend redirects)
+    clean_target = target_origin if target_origin and (target_origin.startswith("/") or target_origin.startswith("http")) else "/"
     sep = "&" if "?" in clean_target else "?"
-    response = RedirectResponse(url=f"{clean_target}{sep}auth_success=true", status_code=303)
+    if clean_target.startswith("http"):
+        redirect_url = f"{clean_target}{sep}token={jwt_token}&auth_success=true"
+    else:
+        redirect_url = f"{clean_target}{sep}auth_success=true"
+    response = RedirectResponse(url=redirect_url, status_code=303)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
         httponly=True,
+        samesite="lax",
+        secure=is_secure,
+        max_age=86400 * 7,
+        path="/"
+    )
+    response.set_cookie(
+        key="agent_team_token",
+        value=jwt_token,
+        httponly=False,
         samesite="lax",
         secure=is_secure,
         max_age=86400 * 7,
@@ -2205,11 +2227,13 @@ async def render_custom_poster(req: PosterRenderRequest, user: Optional[Authenti
         b_name = "Your Brand"
 
     # Strictly resolve vertical to prevent cross-contamination
+    from app.services.creative_direction import get_creative_direction
     vertical = resolve_vertical(industry_primary, industry_sub, b_name, req.title)
-    is_coffee = vertical == "cafe_coffee" or any(k in (b_name + req.title).lower() for k in ("cold brew", "coffee", "brew", "roast"))
-    default_eb = "SINGLE-ORIGIN COLD BREW" if is_coffee else (f"✦ {b_name.upper()}" if b_name else "FEATURED ANNOUNCEMENT")
-    default_badge = "TASTING SESSION" if is_coffee else "FEATURED"
-    default_cta = "Reserve a seat" if is_coffee else "Learn More"
+    is_coffee = vertical == "cafe_coffee" and any(k in (b_name + req.title).lower() for k in ("cold brew", "coffee", "brew", "roast"))
+    cd = get_creative_direction(vertical)
+    default_eb = "SINGLE-ORIGIN COLD BREW" if is_coffee else (f"✦ {b_name.upper()}" if b_name and b_name != "Your Brand" else (f"✦ {cd.vertical_name.upper()}" if cd and cd.vertical_name else "FEATURED COLLECTION"))
+    default_badge = "TASTING SESSION" if is_coffee else ("NEW DROP" if "sneaker" in vertical or "streetwear" in vertical else "✦ FEATURED")
+    default_cta = "Reserve a seat" if is_coffee else (cd.sample_ctas[0] if cd and cd.sample_ctas else "Learn More")
 
     # Strictly enforce Poster copy limits and contamination protection
     from app.agents.poster_designer import tighten_poster_copy, poster_design_agent

@@ -196,7 +196,11 @@ def is_safe_redirect_url(url: Optional[str], allowed_hosts: Optional[list[str]] 
         default_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
         if allowed_hosts:
             default_hosts.extend(allowed_hosts)
-        return parsed.hostname in default_hosts
+        if parsed.hostname in default_hosts:
+            return True
+        if parsed.hostname and (parsed.hostname.endswith(".vercel.app") or parsed.hostname.endswith(".onrender.com")):
+            return True
+        return False
     except Exception:
         return False
 

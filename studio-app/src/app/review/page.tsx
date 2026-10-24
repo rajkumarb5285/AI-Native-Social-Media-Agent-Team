@@ -31,6 +31,7 @@ export default function ReviewApprovePage() {
 
   const [posterUrl, setPosterUrl] = React.useState<string | null>(null);
   const [headline, setHeadline] = React.useState<string>("");
+  const [brand, setBrand] = React.useState<string>("Your Brand");
 
   const [captions, setCaptions] = React.useState<Record<string, string>>({
     instagram: "",
@@ -50,6 +51,7 @@ export default function ReviewApprovePage() {
       if (savedRunStr) {
         const savedRun = JSON.parse(savedRunStr);
         if (savedRun.id) setRunId(savedRun.id);
+        if (savedRun.request?.brand) setBrand(savedRun.request.brand);
         if (savedRun.result?.flagship_narrative?.headline) {
           setHeadline(savedRun.result.flagship_narrative.headline);
         }
@@ -281,12 +283,11 @@ export default function ReviewApprovePage() {
                   </div>
                   <span className="font-semibold text-stone-200">
                     {activeTab === "gmb"
-                      ? "Rajkumar's Coffee Studio (Koregaon Park)"
+                      ? `${brand || "Your Verified Location"}`
                       : activeTab === "facebook"
-                      ? "Rajkumar's Coffee Roasters"
-                      : "rajkumar_studio"}
+                      ? `${brand || "Official Brand Page"}`
+                      : `@${(brand || "brand_studio").toLowerCase().replace(/[^a-z0-9_]/g, "_")}`}
                   </span>
-                  <span className="text-stone-500">· Pune</span>
                 </div>
                 <span className="text-stone-400 font-mono text-[11px]">Preview</span>
               </div>
@@ -344,7 +345,7 @@ export default function ReviewApprovePage() {
                   },
                   {
                     label: "Verified Contact Information",
-                    desc: "+91 98200 12345 & Koregaon Park matched approved Source Facts",
+                    desc: "Phone, address, and handle matched approved Source Facts",
                   },
                   {
                     label: "No Prohibited or Hallucinated Claims",

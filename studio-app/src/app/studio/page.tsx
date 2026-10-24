@@ -175,11 +175,27 @@ export default function StudioFloorPage() {
       console.warn("Agent run error, calling direct poster render fallback:", err);
       // Fallback: directly render high-res poster via poster endpoint
       try {
+        const lowerObj = objective.toLowerCase();
+        let resolvedTheme = "promotional_offer";
+        if (lowerObj.includes("diwali") || lowerObj.includes("deepavali")) {
+          resolvedTheme = "festival_diwali";
+        } else if (lowerObj.includes("holi")) {
+          resolvedTheme = "festival_holi";
+        } else if (industry.includes("cafe") || industry.includes("coffee") || industry.includes("restaurant")) {
+          resolvedTheme = "dining_culinary";
+        } else if (industry.includes("health") || industry.includes("clinic") || lowerObj.includes("wellness")) {
+          resolvedTheme = "healthcare_wellness";
+        } else if (industry.includes("luxury") || industry.includes("jewelry") || lowerObj.includes("luxury")) {
+          resolvedTheme = "luxury_gold";
+        } else if (lowerObj.includes("tech") || lowerObj.includes("saas")) {
+          resolvedTheme = "modern_tech";
+        }
+
         const renderRes = await campaignService.renderPoster({
           business_name: businessName,
           title: objective,
           subtitle: verifiedOffer,
-          theme: objective.toLowerCase().includes("diwali") ? "festival_diwali" : "dining_culinary",
+          theme: resolvedTheme,
           archetype: archetype,
           phone: phone,
           address: address,
@@ -196,12 +212,20 @@ export default function StudioFloorPage() {
     }
   };
 
-  const presetObjectives = [
-    "Diwali Festive Special Offer",
-    "Google 5-Star Reviews Spotlight",
-    "Weekend Cold Brew Tasting",
-    "Flash 15% Seasonal Discount",
-  ];
+  const isSneakerRetail = industry.includes("sneaker") || industry.includes("fashion") || industry.includes("product") || objective.toLowerCase().includes("shoe");
+  const presetObjectives = isSneakerRetail
+    ? [
+        "Exclusive Sneaker Drop & Restock",
+        "Weekend Flash 20% Sale",
+        "Google 5-Star Reviews Spotlight",
+        "Seasonal Streetwear Clearance",
+      ]
+    : [
+        "Seasonal Special Promotion",
+        "Google 5-Star Reviews Spotlight",
+        "Weekend Exclusive Offer",
+        "Flash 15% Seasonal Discount",
+      ];
 
   return (
     <div className="min-h-screen bg-[#121110] text-stone-100 flex flex-col pb-24">
@@ -339,7 +363,7 @@ export default function StudioFloorPage() {
                   required
                   value={verifiedOffer}
                   onChange={(e) => setVerifiedOffer(e.target.value)}
-                  placeholder="e.g. 15% Off Cold Brew Reserve on Weekdays"
+                  placeholder="e.g. 15% Off Your Entire Order This Weekend"
                   className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
                 />
               </div>

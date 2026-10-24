@@ -23,6 +23,18 @@ if (typeof window !== "undefined") {
 
 export function getAuthToken(): string {
   if (typeof window === "undefined") return "";
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramToken = urlParams.get("token");
+    if (paramToken) {
+      localStorage.setItem("agent_team_token", paramToken);
+      urlParams.delete("token");
+      const newQuery = urlParams.toString();
+      const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
+      window.history.replaceState({}, document.title, cleanUrl);
+      return paramToken;
+    }
+  } catch (_) {}
   return localStorage.getItem("agent_team_token") || "";
 }
 

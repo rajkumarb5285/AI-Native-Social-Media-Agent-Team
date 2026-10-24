@@ -151,13 +151,13 @@ def create_hero_text_spec(
 
 
 def create_split_image_text_spec(
-    headline: str = "One origin.\nOne slow pour.",
-    category: str = "SINGLE-ORIGIN COLD BREW",
-    subhead: str = "A guided cold brew tasting session.",
-    cta: str = "Reserve a seat",
-    business_name: str = "Rajkumar's Coffee Studio",
-    primary_color: str = "#E8890C",
-    bg_color: str = "#120A06"
+    headline: str = "Step Into Artistry.\nCrafted With Vision.",
+    category: str = "FEATURED COLLECTION",
+    subhead: str = "Engineered for style, comfort, and bold performance.",
+    cta: str = "Shop Collection",
+    business_name: str = "Your Brand",
+    primary_color: str = "#6366F1",
+    bg_color: str = "#0F172A"
 ) -> PosterSpec:
     """Archetype 2: Full-Bleed Hero Image + Overlay Text (Part 3 Corrected Spec)."""
     return PosterSpec(
@@ -1469,10 +1469,12 @@ def get_archetype_template(
 
     # 4. Split Image + Text
     elif arch in ("split-image-text", "split", "food", "dining", "split-50-50-vertical", "split-60-40-horizontal", "split-asymmetric-diagonal"):
-        is_coffee = any(k in (headline + business_name).lower() for k in ("cold brew", "coffee", "brew", "roast"))
-        cat = "SINGLE-ORIGIN COLD BREW" if is_coffee else f"✦ {business_name.upper()}"
-        default_sub = f"A guided tasting at {business_name}." if is_coffee else f"Crafted with precision at {business_name}."
-        default_cta = "Reserve a seat" if is_coffee else "Learn More"
+        text_context = (headline + " " + business_name).lower()
+        is_shoe = any(k in text_context for k in ("shoe", "sneaker", "footwear", "kicks", "runner", "boots"))
+        is_coffee = not is_shoe and any(k in text_context for k in ("cold brew", "espresso", "latte", "roast", "cafe"))
+        cat = "SINGLE-ORIGIN COLD BREW" if is_coffee else (f"✦ {business_name.upper()}" if business_name and business_name != "Your Brand" else "FEATURED COLLECTION")
+        default_sub = f"A guided tasting at {business_name}." if is_coffee else f"Crafted with visionary precision at {business_name}."
+        default_cta = "Reserve a seat" if is_coffee else ("Shop Collection" if is_shoe else "Learn More")
         return create_split_image_text_spec(
             headline=headline,
             category=cat,

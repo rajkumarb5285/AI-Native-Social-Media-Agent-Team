@@ -788,3 +788,7 @@ def build_creative_direction(
         sample_headlines=sample_headlines,
         sample_ctas=raw_cat.get("sample_ctas", ["Learn More", "Get Started"])
     )
+
+
+# Convenience alias
+get_creative_direction = build_creative_direction
