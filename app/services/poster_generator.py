@@ -77,7 +77,11 @@ def _get_font(font_name: str, size: int) -> ImageFont.ImageFont:
         "arialbd.ttf",
         "arial.ttf",
         "DejaVuSans-Bold.ttf",
-        "DejaVuSans.ttf"
+        "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
     ]
     for candidate in font_candidates:
         try:
@@ -85,9 +89,10 @@ def _get_font(font_name: str, size: int) -> ImageFont.ImageFont:
         except Exception:
             continue
     try:
-        return ImageFont.load_default()
+        return ImageFont.load_default(size=size)
     except Exception:
         return ImageFont.load_default()
+
 
 
 def _draw_star(draw: ImageDraw.Draw, cx: float, cy: float, r_outer: float, r_inner: float, fill: tuple):

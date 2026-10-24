@@ -31,38 +31,54 @@ class RenderResult(BaseModel):
 
 
 def _get_font(font_family: str, size: int, weight: int = 400) -> ImageFont.ImageFont:
-    """Loads matching TrueType font or fallback font at exact pixel size."""
+    """Loads matching TrueType font or scalable fallback font at exact pixel size."""
     is_bold = weight >= 600
     font_candidates = []
 
     # Display / Serif Font Candidates
     if any(k in font_family.lower() for k in ("playfair", "serif", "fraunces", "dm serif")):
         if is_bold:
-            font_candidates.extend(["timesbd.ttf", "georgiab.ttf", "palab.ttf"])
+            font_candidates.extend(["timesbd.ttf", "georgiab.ttf", "palab.ttf", "DejaVuSerif-Bold.ttf", "LiberationSerif-Bold.ttf"])
         else:
-            font_candidates.extend(["times.ttf", "georgia.ttf", "pala.ttf"])
+            font_candidates.extend(["times.ttf", "georgia.ttf", "pala.ttf", "DejaVuSerif.ttf", "LiberationSerif-Regular.ttf"])
 
     # Modern Sans / Clean Candidates (Inter, Montserrat, Poppins, Roboto)
     if is_bold:
-        font_candidates.extend(["segoeuib.ttf", "arialbd.ttf", "calibrib.ttf", "trebucbd.ttf"])
+        font_candidates.extend(["segoeuib.ttf", "arialbd.ttf", "calibrib.ttf", "trebucbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf"])
     else:
-        font_candidates.extend(["segoeui.ttf", "arial.ttf", "calibri.ttf", "trebuc.ttf"])
+        font_candidates.extend(["segoeui.ttf", "arial.ttf", "calibri.ttf", "trebuc.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"])
 
-    # Standard Windows Font Directory
-    win_fonts = Path("C:/Windows/Fonts")
+    search_dirs = [
+        Path("C:/Windows/Fonts"),
+        Path("/usr/share/fonts/truetype/dejavu"),
+        Path("/usr/share/fonts/truetype/liberation"),
+        Path("/usr/share/fonts/truetype"),
+        Path("/usr/share/fonts"),
+        Path("/System/Library/Fonts"),
+    ]
+
+    for d in search_dirs:
+        if d.exists():
+            for name in font_candidates:
+                p = d / name
+                if p.exists():
+                    try:
+                        return ImageFont.truetype(str(p), size)
+                    except Exception:
+                        continue
+
     for name in font_candidates:
-        p = win_fonts / name
-        if p.exists():
-            try:
-                return ImageFont.truetype(str(p), size)
-            except Exception:
-                continue
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            continue
 
-    # Fallback to PIL default
+    # Scalable FreeType fallback at EXACT requested size (CRITICAL for Linux/Docker)
     try:
-        return ImageFont.load_default()
+        return ImageFont.load_default(size=size)
     except Exception:
         return ImageFont.load_default()
+
 
 
 def _draw_linear_gradient(img: Image.Image, color1: tuple, color2: tuple, direction: str = "vertical"):
