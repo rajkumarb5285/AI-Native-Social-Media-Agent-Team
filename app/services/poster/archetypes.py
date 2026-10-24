@@ -194,7 +194,7 @@ def create_split_image_text_spec(
                 h=56,
                 radius=28,
                 fill=primary_color,
-                text="★ VERIFIED RESERVE",
+                text="ARTISAN SELECTION",
                 font="text",
                 size=28,
                 weight=700,
@@ -939,9 +939,11 @@ def get_archetype_template(
         # Default to hero-text
         return create_hero_text_spec(
             headline=headline,
+            eyebrow=f"✦ {business_name.upper()}" if business_name else "FEATURED ANNOUNCEMENT",
             subhead=subhead or "Empowering modern business with intelligent content automation.",
             cta=cta or "Get Started",
             contact=f"{business_name.lower().replace(' ', '')}.com",
             primary_color=primary_color,
             bg_color=bg_color or "#0B0F19"
         )
+

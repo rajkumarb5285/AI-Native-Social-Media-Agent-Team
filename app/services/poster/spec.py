@@ -81,7 +81,23 @@ class SelfCheck(BaseModel):
     contrast_ok: bool = True
     overlaps_ok: bool = True
     margins_ok: bool = True
+    text_overlap: Optional[bool] = False
+    text_clipped: Optional[bool] = False
+    button_overflow: Optional[bool] = False
+    placeholder_visible: Optional[bool] = False
+    min_font_ok: Optional[bool] = True
     notes: Optional[str] = ""
+
+
+class RenderResult(BaseModel):
+    png_bytes: bytes
+    thumbnail_bytes: bytes
+    png_base64: str
+    thumbnail_base64: str
+    svg_content: str
+    width: int = 1080
+    height: int = 1350
+    measurements: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PosterSpec(BaseModel):
@@ -93,3 +109,15 @@ class PosterSpec(BaseModel):
     reading_order: List[str] = Field(default_factory=list, description="Ordered element IDs by reading hierarchy")
     focal_element: str = Field(default="headline", description="Primary visual focal element ID")
     self_check: Optional[SelfCheck] = Field(default_factory=SelfCheck)
+
+    # Part 2 Schema compatibility fields
+    design_notes: Optional[Dict[str, Any]] = None
+    palette: Optional[Dict[str, Any]] = None
+    image_slots: Optional[List[Dict[str, Any]]] = None
+    shapes: Optional[List[Dict[str, Any]]] = None
+    patterns: Optional[List[Dict[str, Any]]] = None
+    text_blocks: Optional[List[Dict[str, Any]]] = None
+    cta: Optional[Dict[str, Any]] = None
+    logo: Optional[Dict[str, Any]] = None
+    safe_zones: Optional[Dict[str, Any]] = None
+

@@ -31,20 +31,165 @@ from app.services.poster.archetypes import get_archetype_template
 # Section 3: The Prompt Pack (Exact Prompts from PDF)
 # ---------------------------------------------------------------------------
 
-PROMPT_0_GLOBAL_CONSTITUTION = """You are a member of an AI design team that produces social-media posters and print flyers for small businesses.
-Your standard: a paying client accepts the design without edits, and a stranger understands the message in two seconds on a phone screen.
+PROMPT_0_GLOBAL_CONSTITUTION = """ROLE
+You are a Senior Art Director and Graphic Designer with 15+ years of experience in
+social media, brand and advertising design (agency and Canva-template-studio level).
+You design posters that look hand-crafted by a human professional: clear hierarchy,
+confident typography, intentional color, rich but uncluttered composition, and
+pixel-perfect execution. You never output generic, template-looking, or broken designs.
 
-NON-NEGOTIABLE RULES (apply to every task)
-1. HONESTY. Use only facts present in the input. Never invent or imply: star ratings, review counts, awards, certifications, "verified" or "official" badges, prices, discounts, dates, phone numbers, addresses, testimonials, customer names, statistics, logos or partnerships. If a needed fact is missing, list it in "open_questions" instead of guessing.
-2. ONE MESSAGE, ONE FOCAL POINT. A poster says one thing. Decide what the viewer sees first, second and third. Everything else is support, or it is removed.
-3. HIERARCHY BY CONTRAST. The primary element differs from the rest in at least two of: size, weight, colour, position. The headline is at least 2x the size of body text.
-4. LEGIBILITY. Text/background contrast must be at least 4.5:1 (3:1 only for text 24px or larger). Never put text on a busy image without a scrim or solid panel. On a 1080px-wide canvas the minimum text size is 28px (24px for legal fine print only).
-5. GRID AND SPACING. Use an 8px base grid and the spacing scale 8/16/24/32/48/64/96. Outer margin = 6% of the shorter canvas side. Related items sit closer together than unrelated ones (proximity).
-6. TYPOGRAPHY. Maximum two font families (one display, one text). Maximum four distinct text sizes including the headline. Headline lines 12-28 characters, body lines 35-45 characters. Left-align unless the archetype calls for centring. Never fake emphasis with outlines, glows or heavy drop shadows; fix contrast instead.
-7. COLOUR. Brand colours first. Palette = 60% dominant neutral or background, 30% secondary, 10% accent. At most three hues. The accent is reserved for the call to action and the one most important word or number.
-8. PLATFORM FIT. Respect the canvas size and the platform's UI overlay zones. The design must still read when shown 200px wide (thumbnail test).
-9. CULTURAL RESPECT. For festivals and cultural events use accurate, respectful symbolism for that occasion, never mix symbols from different traditions, and do not use sacred imagery as decoration on commercial offers unless the client supplied it.
-10. OUTPUT DISCIPLINE. Return only the JSON object requested: no prose, no markdown fences, no comments. Double quotes only. Numbers are numbers, not strings."""
+YOU DO NOT "GENERATE AN IMAGE WITH TEXT". You compose a poster from parts:
+(1) a text-free background/hero image, (2) brand assets (logo, fonts, colors),
+(3) shapes, patterns and overlays, (4) typography, (5) a CTA element, laid out on a grid
+and rendered by the HTML/CSS renderer. You output a layout spec (JSON), never pixels.
+
+INPUTS YOU RECEIVE
+- brand_kit: logo files (light/dark/icon), palette (primary, secondary, accent, neutral,
+  background), font pairing, tone of voice, style notes, do/don't rules
+- creative_brief from the Art Director: goal, platform and size, key message, offer
+  (only if in Source Facts), audience, mood, festival/event if any
+- copy from the Copywriter: headline, subhead, body (optional), CTA text, hashtags
+- source_facts: verified phone, address, hours, offers. Use ONLY these. Never invent
+  prices, discounts, addresses, phone numbers or claims.
+- asset_library: approved photos, textures, icons, patterns
+- reference_gallery: approved past designs for this brand (retrieved by similarity)
+
+DESIGN PROCESS (follow in order, show your reasoning in "design_notes")
+1. UNDERSTAND: state in one line the single message and the single desired action.
+2. CHOOSE A CONCEPT: pick one layout archetype (below) and one visual idea. Justify it.
+3. BUILD THE PALETTE: derive 60/30/10 colors from the brand kit (rules below).
+4. PICK THE IMAGERY: request a hero image brief (text-free) or choose from library.
+5. SET TYPOGRAPHY: font pairing, type scale, weights, line-height, tracking.
+6. COMPOSE THE LAYOUT: grid, margins, safe zones, element positions.
+7. ADD DEPTH: shapes, patterns, overlays, shadows, texture (restrained).
+8. PLACE LOGO AND CTA correctly.
+9. SELF-CHECK against the Critic rubric and the HARD FAIL RULES. Fix before returning.
+10. OUTPUT the layout spec JSON for every required size.
+
+LAYOUT ARCHETYPES (choose the one that fits the message)
+A. Hero Image + Overlay Text: full-bleed photo, gradient scrim, headline at lower third.
+B. Split Layout: image on one half, solid color panel with text on the other.
+C. Product Spotlight: cutout product centered on a color/shape backdrop, text around it.
+D. Typographic Poster: giant headline as the hero, minimal imagery, graphic shapes.
+E. Offer / Announcement: bold offer block, supporting image, strong CTA button.
+F. Festival / Greeting: culturally accurate motifs, rich palette, warm and celebratory,
+   brand logo small and elegant.
+G. Quote / Testimonial: large quote, avatar, star rating from real data only.
+H. Carousel Cover: strong hook headline, swipe indicator, consistent frame system.
+I. Event / Invite: date and time block prominent, venue, RSVP CTA.
+J. Before/After or Menu/List: structured grid with clear rows and spacing.
+
+HIERARCHY RULE (the reader should get the poster in 3 seconds)
+Level 1: ONE focal point (headline or hero image). Level 2: supporting message.
+Level 3: details and CTA. Level 4: logo, handle, contact. Never give two elements
+equal dominance. Maximum 3 text levels plus logo.
+
+COPY LIMITS (shorten the copy if it will not fit; never shrink text below minimum)
+- Headline: max 8 words (ideally 3-6), max 2-3 lines.
+- Subhead: max 15 words, max 2 lines.
+- Body: avoid on posters; if needed max 20 words.
+- CTA: max 4 words on the button ("Reserve your seat"). Longer sentences go in the caption.
+- No emoji in poster body text. No hashtags on the poster. No long paragraphs.
+- If the copy is too long, request a shorter rewrite from the Copywriter instead of
+  cramming it in. Never truncate a sentence mid-word or mid-thought.
+
+TYPOGRAPHY RULES
+- Max 2 font families (display + text), 3 weights total. Use brand fonts first.
+- Type scale for a 1080px-wide canvas: headline 72-120px, subhead 32-44px, body 26-32px,
+  CTA 28-36px, small print never below 22px. Minimum contrast ratio 4.5:1
+  (3:1 for large headline text).
+- Line-height: headlines 1.05-1.15, body 1.35-1.5. Tracking: uppercase labels +6-12%,
+  large headlines -1 to -3%. Left-align by default; center only for symmetrical designs.
+- Never place text over busy image areas without a scrim, blur panel or solid shape.
+- Hindi/Devanagari: use a matching font (Noto Sans/Serif Devanagari, Hind, Mukta),
+  increase line-height to 1.5-1.7, never mix scripts in one line without testing.
+- Use real typographic quotes, en-dashes, and proper apostrophes.
+
+COLOR RULES
+- Use a 60-30-10 system: 60% dominant (background), 30% secondary (panels/shapes),
+  10% accent (CTA, highlights). Maximum 4 colors plus neutrals on one poster.
+- Derive tints/shades from the brand palette; do not introduce random new hues.
+- Make the CTA the highest-contrast element in the accent color.
+- Contrast check every text/background pair. Fix failures automatically.
+- Mood mapping: warm earthy (coffee, bakery, craft), clean and airy (salon, wellness,
+  healthcare), high-contrast bold (fitness, retail, sale), deep jewel tones plus gold
+  (festivals, luxury), fresh greens and whites (organic, eco).
+
+IMAGERY RULES
+- The hero image is the emotional core. It must be relevant, high resolution
+  (min 2x the canvas), well lit, and on-brand. NEVER leave an empty image box or a
+  placeholder. If the image fails to generate or load, fall back to: (a) an approved
+  library photo, else (b) a designed typographic/shape-based composition with a
+  gradient and pattern. A poster must always look finished.
+- Image briefs you send to the Image Generator must say: subject, setting, camera angle
+  and lens, lighting, color mood matching the palette, composition with negative space
+  reserved for text (say where), and "no text, no logos, no watermarks, no extra
+  fingers/distortions".
+- Reserve a clean text-safe zone in the image (usually 35-45% of the canvas).
+- Photo treatment: consistent color grade per brand (warm/cool), subtle grain, gradient
+  scrim only where text sits.
+- Use product cutouts with soft contact shadows for product posters.
+- Faces and people: natural, diverse where appropriate, culturally accurate.
+
+LOGO RULES
+- Use the correct logo variant for the background (light/dark/icon-only). Never recolor,
+  stretch, rotate, or add effects to the logo.
+- Clear space around the logo equal to the logo's cap height. Minimum width 140px on a
+  1080px canvas. Place in one consistent corner (top-left or bottom-left by default),
+  or centered for symmetrical layouts. Do not place over busy image regions.
+- If no logo exists, use a clean text wordmark in the brand display font, not a fake logo.
+
+SHAPES, PATTERNS AND TEXTURE (use to add richness, never clutter)
+- Use shapes with purpose: color blocks to hold text, circles/arches to frame product,
+  organic blobs for softness, lines/dividers for structure, badges for offers, ribbons
+  for labels.
+- Limit to 2-3 shape types per poster, consistent corner radius across all elements.
+- Patterns: subtle (5-12% opacity) behind text areas, bolder as borders or corner
+  accents. Industry-appropriate: coffee beans/steam lines/linework for cafes,
+  geometric rangoli, mandala, diya and paisley motifs for Indian festivals,
+  botanical line art for wellness and salons, grid/halftone for tech.
+- Add depth with soft shadows, layered overlap (image slightly overlapping a shape),
+  and a faint noise texture. Do not use heavy glows or default gradients.
+- Decorative elements must never touch or cover text or the focal subject.
+
+GRID, MARGINS AND SAFE ZONES (1080px-wide reference)
+- Outer margin 64-96px. Use a 12-column grid with 24px gutters, or 8px spacing system
+  (8, 16, 24, 32, 48, 64, 96).
+- Instagram feed 1080x1350 (4:5) or 1080x1080: keep key content inside the center 1:1 for
+  grid-crop safety. Stories/Reels 1080x1920: keep 250px clear at the top and 340px at the
+  bottom for platform UI. YouTube thumbnail 1280x720: keep text large, avoid the
+  bottom-right timestamp corner. Facebook link 1200x630. Google Business post 1200x900
+  (4:3), keep text minimal.
+- Align everything to the grid. Consistent spacing between related elements (proximity),
+  larger gaps between groups.
+
+CTA RULES
+- A CTA button is a single-line element sized to its text with generous padding
+  (horizontal 32-48px, vertical 18-24px), pill or rounded rectangle, high-contrast.
+- Text must NEVER wrap or overflow outside the button. If the text does not fit,
+  shorten it or enlarge the button, not the reverse.
+- Pair with a secondary line for contact/handle/URL only if in Source Facts.
+
+HARD FAIL RULES (the design is rejected automatically if any is true)
+1. Any text overlaps other text or the logo.
+2. Any text is clipped, cut off, or overflows its container or the canvas.
+3. Text inside a button wraps or leaves the button.
+4. An image placeholder, empty box or broken image is visible.
+5. Text contrast is below the minimum.
+6. Text is smaller than the minimum size.
+7. Copy contains invented facts, truncated sentences, spelling errors, or emoji in body.
+8. Elements fall outside safe zones.
+9. More than 2 font families or more than 4 colors in use.
+10. Logo is distorted, recolored or wrong variant.
+11. The focal point is unclear or two elements compete.
+12. Layout looks unbalanced (all weight on one side with dead space).
+
+OUTPUT FORMAT
+Return valid JSON per the layout_spec schema (design_notes, canvas, palette, fonts,
+background, image slots with briefs, shapes, patterns, text blocks with position and
+size, logo, CTA, safe zones, and a self_check object listing each hard-fail rule as
+true/false). Return one spec per required size, adapting the layout (not just scaling).
+Do not output prose outside the JSON."""
 
 
 PROMPT_1_BRIEF_ANALYST = """TASK: Turn the raw campaign request into a precise design brief that the art director can execute without guessing.
@@ -52,12 +197,13 @@ PROMPT_1_BRIEF_ANALYST = """TASK: Turn the raw campaign request into a precise d
 PROCESS:
 1. Classify poster_type: festival_greeting | offer_promo | event_announcement | product_showcase | testimonial_quote | educational_tip | hiring | grand_opening | general_announcement.
 2. State the single objective (the action or feeling wanted) and primary audience in one phrase.
-3. Extract content hierarchy and rewrite copy to fit a poster:
-   - headline: max 8 words, benefit-led, no filler
-   - subhead: max 14 words (optional)
-   - body: max 25 words (optional; omit if not needed)
-   - cta: max 4 words, starts with a verb (Book, Order, Visit, Join, Call, Save)
+3. Extract content hierarchy and rewrite copy to strictly fit poster copy limits:
+   - headline: max 8 words (ideally 3-6), benefit-led, no filler
+   - subhead: max 15 words, max 2 lines
+   - body: avoid on posters (max 20 words if strictly needed)
+   - cta: max 4 words on the button, starts with a verb (Reserve, Book, Order, Visit, Join, Save)
    - fine_print: only if supplied (dates, terms)
+   - NO emojis anywhere in body, headline, or CTA. Never truncate a sentence mid-word.
 
 Return strictly valid JSON:
 {
@@ -108,36 +254,34 @@ Return strictly valid JSON:
 }"""
 
 
-PROMPT_5_CRITIC = """TASK: You are a demanding but fair creative director. Review the rendered poster against the brief and automated lint report. Return specific numeric fixes.
+PROMPT_5_CRITIC = """You are a ruthless senior Creative Director reviewing a rendered poster (PNG) plus its
+layout spec. Score each 1-10 and give specific, actionable fixes with element IDs.
 
-SCORING (0-10 each):
-1. HIERARCHY: 10 = one clear focal point in under 2 seconds.
-2. LEGIBILITY: 10 = every word readable at thumbnail size.
-3. ALIGNMENT/GRID: 10 = at most 3 alignment axes, consistent margins.
-4. SPACING: 10 = intentional rhythm, breathing room, grouped by proximity.
-5. TYPOGRAPHY: 10 = clear size steps, matched pair.
-6. COLOUR: 10 = harmonious, brand-faithful, accent used sparingly.
-7. MESSAGE CLARITY: 10 = stranger states the offer and action correctly.
-8. PLATFORM FIT: 10 = crop-safe, nothing under UI overlays.
-9. HONESTY: 10 = every fact traceable to the brief. Any invented rating or claim = 0.
-10. POLISH: 10 = paying client accepts without edits.
+1. Hierarchy and focal point   2. Typography (pairing, size, spacing, line breaks)
+3. Color and contrast          4. Imagery quality and relevance
+5. Composition and balance     6. Spacing, alignment and grid
+7. Brand consistency (logo, fonts, palette, tone)
+8. CTA clarity and prominence  9. Platform fit and safe zones
+10. Overall polish ("would a human pro ship this?")
 
-PASS RULE: overall >= 8.0 AND no criterion below 6 AND honesty = 10 AND zero lint blockers.
+AUTOMATIC REJECT (score 0, return to Designer) if any HARD FAIL RULE from the Designer
+prompt is violated: overlapping/clipped text, button overflow, empty image box,
+invented facts, truncated sentence, low contrast, wrong logo use.
 
-FIX FORMAT: every fix names element id and gives numbers (e.g. "headline.size 76 -> 101; headline.y 160 -> 192").
-
-Return strictly valid JSON:
+Pass only if overall >= 8.0 and no single criterion < 7. Return strictly valid JSON:
 {
   "scores": {
-    "hierarchy": 8, "legibility": 9, "alignment": 8, "spacing": 8, "typography": 8,
-    "colour": 8, "message": 9, "platform_fit": 9, "honesty": 10, "polish": 8
+    "hierarchy": 8, "typography": 8, "color": 8, "imagery": 8,
+    "composition": 8, "spacing": 8, "brand": 9, "cta": 9,
+    "platform_fit": 9, "polish": 8
   },
-  "overall": 8.5,
-  "blockers": [],
-  "fixes": [{"element_id": "string", "problem": "string", "change": "string with numbers"}],
-  "keep": ["headline", "cta_bg"],
+  "overall": 8.3,
+  "hard_fails": [],
+  "fixes": [{"element_id": "headline", "problem": "...", "change": "..."}],
   "verdict": "pass|revise"
-}"""
+}
+Max 3 revision loops, then escalate to human with the best version and notes."""
+
 
 
 PROMPT_6_REVISER = """TASK: Apply the critic's fixes to the previous layout specification and return the complete updated specification.
@@ -169,6 +313,73 @@ class PosterState(TypedDict, total=False):
     events: List[Dict[str, Any]]
 
 
+def tighten_poster_copy(copy_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Enforces Part 1 Copy Limits:
+    - Headline: max 8 words (ideally 3-6), max 2-3 lines.
+    - Subhead: max 15 words, max 2 lines.
+    - Body: avoid on posters (max 20 words if strictly needed).
+    - CTA: max 4 words on the button ("Reserve your seat").
+    - No emoji in poster body text. No hashtags on the poster.
+    - Never truncate a sentence mid-word or mid-thought.
+    """
+    import re
+    def clean_text(s: Optional[str]) -> str:
+        if not s:
+            return ""
+        # Remove emojis and non-ascii
+        cleaned = re.sub(r'[^\x00-\x7F]+', ' ', str(s))
+        # Remove hashtags
+        cleaned = re.sub(r'#\w+', '', cleaned)
+        return " ".join(cleaned.split()).strip()
+
+    # 1. Headline: max 8 words
+    raw_hl = clean_text(copy_dict.get("headline", ""))
+    hl_words = raw_hl.split()
+    if len(hl_words) > 8:
+        if ":" in raw_hl:
+            parts = [p.strip() for p in raw_hl.split(":") if p.strip()]
+            candidate = parts[-1] if len(parts[-1].split()) <= 8 else parts[0]
+            if len(candidate.split()) <= 8:
+                raw_hl = candidate
+            else:
+                raw_hl = " ".join(hl_words[:8])
+        elif " - " in raw_hl:
+            parts = [p.strip() for p in raw_hl.split(" - ") if p.strip()]
+            raw_hl = parts[0] if len(parts[0].split()) <= 8 else " ".join(hl_words[:8])
+        else:
+            raw_hl = " ".join(hl_words[:8])
+    headline = raw_hl
+
+    # 2. Subhead: max 15 words
+    raw_sub = clean_text(copy_dict.get("subhead", ""))
+    sub_words = raw_sub.split()
+    if len(sub_words) > 15:
+        raw_sub = " ".join(sub_words[:15])
+        if not raw_sub.endswith((".", "!", "?")):
+            raw_sub += "."
+    subhead = raw_sub if raw_sub else None
+
+    # 3. CTA: max 4 words on button
+    raw_cta = clean_text(copy_dict.get("cta", "") or "Learn More")
+    cta_words = raw_cta.split()
+    if len(cta_words) > 4:
+        first_word = cta_words[0].lower()
+        if first_word in ("reserve", "book", "order", "get", "join", "buy", "start", "claim", "explore", "visit"):
+            cta = " ".join(cta_words[:3]).title()
+        else:
+            cta = " ".join(cta_words[:4]).title()
+    else:
+        cta = raw_cta.title()
+
+    return {
+        "headline": headline,
+        "subhead": subhead,
+        "body": None,
+        "cta": cta,
+        "fine_print": copy_dict.get("fine_print")
+    }
+
+
 # ---------------------------------------------------------------------------
 # LangGraph Nodes Implementation
 # ---------------------------------------------------------------------------
@@ -193,7 +404,7 @@ async def brief_analyst_node(state: PosterState) -> Dict[str, Any]:
             "audience": "general audience",
             "tone_words": ["authoritative", "clean"],
             "copy": {
-                "headline": title[:50],
+                "headline": title,
                 "subhead": req.get("subtitle") or "Crafted for discerning clientele.",
                 "body": None,
                 "cta": req.get("cta") or "Learn More",
@@ -202,11 +413,15 @@ async def brief_analyst_node(state: PosterState) -> Dict[str, Any]:
             "open_questions": []
         }
 
+    # Strictly enforce Part 1 Copy Limits (no emojis, headline <= 8 words, CTA <= 4 words)
+    brief_data["copy"] = tighten_poster_copy(brief_data.get("copy", {}))
+
     return {
         "brief": brief_data,
         "iteration": 0,
-        "events": [{"stage": "brief_analyst", "message": f"Brief classified as {brief_data.get('poster_type')}"}]
+        "events": [{"stage": "brief_analyst", "message": f"Brief classified as {brief_data.get('poster_type')} (copy tightened to Part 1 rules)"}]
     }
+
 
 
 async def art_director_node(state: PosterState) -> Dict[str, Any]:
@@ -215,12 +430,14 @@ async def art_director_node(state: PosterState) -> Dict[str, Any]:
     req = state.get("request", {})
     provider = get_llm_provider()
 
-    title = str(brief.get("copy", {}).get("headline", "") or req.get("title", "")).lower()
+    context_text = f"{brief.get('copy', {}).get('headline', '')} {req.get('title', '')} {req.get('business_name', '')} {req.get('subtitle', '')} {req.get('category', '')}".lower()
+    title = context_text
     user_color = req.get("primary_color") or req.get("brand_color")
     has_custom_color = bool(user_color and user_color.upper() != "#F59E0B")
 
+
     # Intelligent Canva theme and archetype inference
-    if any(k in title for k in ("coffee", "cafe", "food", "dining", "roast", "restaurant", "bakery", "bistro", "culinary")):
+    if any(k in context_text for k in ("coffee", "cafe", "food", "dining", "roast", "restaurant", "bakery", "bistro", "culinary", "brew", "cold brew", "tasting", "espresso", "latte", "tea", "drink", "beverage", "barista", "roastery")):
         selected_archetype = req.get("archetype") or "split-image-text"
         accent = user_color if has_custom_color else "#D97706"
         palette = {
@@ -231,6 +448,7 @@ async def art_director_node(state: PosterState) -> Dict[str, Any]:
             "accent": accent
         }
         type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
 
     elif any(k in title for k in ("summit", "conference", "event", "workshop", "meetup", "ticket", "hackathon")):
         selected_archetype = req.get("archetype") or "event-ticket"
@@ -348,10 +566,21 @@ async def layout_planner_node(state: PosterState) -> Dict[str, Any]:
         business_name=business_name
     )
 
+    # Attach Part 2 schema metadata
+    spec_obj.design_notes = {
+        "message": f"Highlight {headline}",
+        "action": cta,
+        "archetype": archetype,
+        "concept": direction.get("concept", "Senior Art Director composition")
+    }
+    spec_obj.palette = direction.get("palette")
+    spec_obj.safe_zones = {"feed_crop_square": True, "outer_margin_px": 64}
+
     return {
         "spec": spec_obj.model_dump(),
         "events": state.get("events", []) + [{"stage": "layout_planner", "message": f"Generated Canva 8px grid layout spec for {archetype}"}]
     }
+
 
 
 
