@@ -139,142 +139,128 @@ def create_hero_text_spec(
 
 
 def create_split_image_text_spec(
-    headline: str = "Artisanal Single-Origin Coffee",
-    category: str = "SPECIALTY ROASTERY",
-    subhead: str = "Handcrafted pour-overs and small-batch cold brews roasted fresh daily.",
-    cta: str = "Order For Pickup",
-    business_name: str = "Artisan Cafe & Lab",
-    primary_color: str = "#D97706",
-    bg_color: str = "#140D07"
+    headline: str = "One origin.\nOne slow pour.",
+    category: str = "SINGLE-ORIGIN COLD BREW",
+    subhead: str = "A guided cold brew tasting session.",
+    cta: str = "Reserve a seat",
+    business_name: str = "Rajkumar's Coffee Studio",
+    primary_color: str = "#E8890C",
+    bg_color: str = "#120A06"
 ) -> PosterSpec:
-    """Archetype 2: split-image-text. Half showcase card, half structured copy."""
+    """Archetype 2: Full-Bleed Hero Image + Overlay Text (Part 3 Corrected Spec)."""
     return PosterSpec(
-        canvas=CanvasConfig(width=1080, height=1350, scale=1.0, margin=64),
-        background=BackgroundConfig(type="gradient", value=f"{bg_color} -> #080503"),
-        fonts=FontsConfig(display="Playfair Display", text="Inter"),
-        reading_order=["category_tag", "showcase_card", "headline", "subhead", "cta_bg", "cta_text", "business_name"],
-        focal_element="showcase_card",
+        canvas=CanvasConfig(width=1080, height=1350, scale=1.0, margin=80),
+        background=BackgroundConfig(type="solid", value=bg_color),
+        fonts=FontsConfig(display="Fraunces", text="Inter"),
+        reading_order=["category_tag", "showcase_badge", "headline", "subhead", "cta_bg", "cta_text", "business_name"],
+        focal_element="headline",
         elements=[
             PosterElement(
                 id="category_tag",
                 type="text",
                 z=3,
-                x=64,
+                x=80,
                 y=80,
-                w=952,
+                w=920,
                 h=40,
-                text=f"✦ {category}",
+                text=category,
                 font="text",
                 weight=700,
-                size=28,
+                size=26,
                 color=primary_color,
-                letter_spacing="0.08em"
-            ),
-            PosterElement(
-                id="showcase_card",
-                type="shape",
-                z=1,
-                x=64,
-                y=144,
-                w=952,
-                h=540,
-                radius=32,
-                fill="#24170F",
-                stroke=primary_color,
-                stroke_width=2,
-                decorative=True
+                letter_spacing="0.12em"
             ),
             PosterElement(
                 id="showcase_badge",
                 type="badge",
                 z=3,
-                x=96,
-                y=176,
-                w=280,
-                h=56,
-                radius=28,
+                x=760,
+                y=80,
+                w=240,
+                h=48,
+                radius=24,
                 fill=primary_color,
-                text="ARTISAN SELECTION",
+                text="TASTING SESSION",
                 font="text",
-                size=28,
+                size=24,
                 weight=700,
-                color="#FFFFFF"
+                color="#1A0F0A"  # Dark on amber per Rule D
             ),
-
             PosterElement(
                 id="headline",
                 type="text",
                 z=3,
-                x=64,
-                y=728,
-                w=952,
+                x=80,
+                y=860,
+                w=920,
                 h=200,
                 text=headline,
                 font="display",
-                weight=800,
-                size=68,
-                line_height=1.15,
-                color="#FFF8F0"
+                weight=700,
+                size=90,
+                line_height=1.06,
+                color="#FFF1DF"
             ),
             PosterElement(
                 id="subhead",
                 type="text",
                 z=3,
-                x=64,
-                y=944,
-                w=952,
-                h=140,
+                x=80,
+                y=1080,
+                w=920,
+                h=100,
                 text=subhead,
                 font="text",
                 weight=400,
                 size=34,
                 line_height=1.4,
-                color="#D1C7BD"
+                color="#CDB9A3"
             ),
             PosterElement(
                 id="cta_bg",
                 type="shape",
                 z=2,
-                x=64,
-                y=1160,
-                w=440,
-                h=88,
-                radius=44,
+                x=80,
+                y=1190,
+                w=360,
+                h=80,
+                radius=40,
                 fill=primary_color
             ),
             PosterElement(
                 id="cta_text",
                 type="text",
                 z=3,
-                x=64,
-                y=1160,
-                w=440,
-                h=88,
-                text=f"{cta} →",
+                x=80,
+                y=1190,
+                w=360,
+                h=80,
+                text=cta,
                 font="text",
                 weight=700,
-                size=32,
-                line_height=2.7,
+                size=34,
+                line_height=2.3,
                 align="center",
-                color="#FFFFFF"
+                color="#1A0F0A"  # Dark on amber
             ),
             PosterElement(
                 id="business_name",
                 type="text",
                 z=3,
-                x=540,
-                y=1184,
-                w=476,
+                x=560,
+                y=1208,
+                w=440,
                 h=48,
                 text=business_name,
                 font="text",
                 weight=600,
-                size=28,
+                size=26,
                 align="right",
-                color="#A89F91"
+                color="#CDB9A3"
             ),
         ]
     )
+
 
 
 def create_centered_badge_spec(
@@ -872,14 +858,15 @@ def get_archetype_template(
     arch = archetype.lower().strip()
 
     if arch in ("split-image-text", "split", "food", "dining", "product"):
+        cat = "SINGLE-ORIGIN COLD BREW" if any(k in (headline + business_name).lower() for k in ("cold brew", "coffee", "brew", "roast")) else f"✦ {business_name.upper()}"
         return create_split_image_text_spec(
             headline=headline,
-            category=business_name.upper(),
-            subhead=subhead or "Handcrafted with the finest ingredients and verified perfection.",
-            cta=cta or "Order Now",
+            category=cat,
+            subhead=subhead or f"A guided tasting at {business_name}.",
+            cta=cta or "Reserve a seat",
             business_name=business_name,
-            primary_color=primary_color,
-            bg_color=bg_color or "#140D07"
+            primary_color=primary_color or "#E8890C",
+            bg_color=bg_color or "#120A06"
         )
     elif arch in ("festival", "centered-badge", "festival_greeting", "badge"):
         badge_title = "SPECIAL EDITION"

@@ -189,7 +189,84 @@ Return valid JSON per the layout_spec schema (design_notes, canvas, palette, fon
 background, image slots with briefs, shapes, patterns, text blocks with position and
 size, logo, CTA, safe zones, and a self_check object listing each hard-fail rule as
 true/false). Return one spec per required size, adapting the layout (not just scaling).
-Do not output prose outside the JSON."""
+Do not output prose outside the JSON.
+
+FINE-TUNING RULES (v2) - OVERRIDES EARLIER GUIDANCE:
+A. THINK LIKE A POSTER, NOT A WEB CARD
+- Output a fixed-size canvas (e.g. 1080x1350). Nothing renders outside it. No outer
+  frame, no rounded outer card, no extra bars.
+- Prefer full-bleed imagery with a gradient scrim, or an intentionally shaped image
+  (arch, circle, diagonal cut) layered over color blocks. Never a small boxed photo with a
+  hairline border.
+- Build layers in this order: 1) background color, 2) hero image, 3) scrim/overlay,
+  4) shapes and patterns, 5) grain, 6) text, 7) CTA, 8) logo. Create at least 3 layers
+  of depth.
+
+B. SPACING SYSTEM
+- 8px base unit. Outer margin 80px on all four sides. Left and right margins must be
+  identical. Bottom margin equals top margin.
+- Vertical rhythm: eyebrow to headline 20px, headline to subhead 24px, subhead to CTA
+  40px. Group related items tightly, separate groups clearly.
+- Anchor the text stack to the bottom margin using a flex column (justify-content: end)
+  so there is never dead space under the CTA or overlap above it.
+- Balance: if the image subject is centered or right, text sits left and low; keep
+  visual weight spread across the diagonal.
+
+C. TEXT RULES
+- Headline max 6 words, max 2 lines, break lines by meaning ("One origin. / One slow
+  pour."), never leave a single orphan word.
+- Never put the business name in the headline unless it IS the message. Show it once via
+  the logo or wordmark.
+- Subhead max 12 words, max 2 lines. No body paragraph on a poster.
+- Never truncate. If the copy does not fit, request shorter copy. Never use line-clamp
+  or overflow:hidden on text.
+- Use ONLY facts from Source Facts. Do not invent scarcity ("limited spots"), awards,
+  prices, discounts or adjectives of grandeur ("visionary"). If event details (date,
+  time, price, venue) are required but missing, return `needs_input` listing exactly
+  which facts to ask the user for, instead of guessing.
+- Use true apostrophes and quotes (’ “ ”). Treat all text as UTF-8; never strip or
+  escape apostrophes.
+
+D. BADGES, LABELS AND BUTTONS (shrink-wrap rule)
+- Pills, badges and buttons size to their text: display:inline-flex; width:fit-content;
+  white-space:nowrap; padding 14-20px vertical, 28-40px horizontal for badges (smaller
+  type) and 20-24px / 40-48px for the CTA.
+- Badge: 22-26px uppercase, tracking 10-14%, dark text (#1A0F0A) on the accent
+  color, or cream text on a dark translucent chip. Never white on amber.
+- CTA: max 3-4 words ("Reserve a seat"), 32-36px semibold, height 80px, fully inside the
+  margins. Secondary info (handle, address) sits OUTSIDE the button in a separate
+  right-aligned element in the same flex row with justify-content: space-between and
+  a minimum 32px gap, so they can never overlap.
+
+E. TYPOGRAPHY QUALITY
+- Fonts must be bundled and preloaded (woff2 / ttf). If a required font is not loaded, STOP and
+  return an error. Never silently fall back to system fonts.
+- Headline in a refined display serif (Fraunces, Playfair Display, or the brand font)
+  at 84-96px, weight 700, line-height 1.05-1.1, slight negative tracking.
+  Supporting text in Inter at 32-36px, line-height 1.4. Eyebrow/labels in Inter
+  600, 24-26px, uppercase, tracking +12%.
+- Optical alignment: align text to the left margin, nudge large headline letters
+  (-2 to -4px) so the glyph edge visually matches the margin.
+
+F. SHAPES, PATTERN AND TEXTURE (fixes the "flat" look)
+- Add at least one structural shape (thin amber ring or arch behind the hero subject, a
+  divider line, or a color block) and one subtle pattern at 6-10% opacity relevant to the
+  industry (coffee: steam lines / bean outlines / fine linework).
+- Add a 3-5% film-grain overlay and a soft vignette to unify the photo and background.
+- Keep a single corner-radius value across all elements.
+
+G. IMAGE HANDLING
+- Request images at minimum 2160px wide, crop with object-fit:cover and an explicit focal
+  point (object-position) so the subject (the glass) is never cut or lost under text.
+- Color-grade the photo toward the palette (warm shadows, lifted blacks, no pure black).
+- Apply the gradient scrim only behind text (transparent at 40% height to solid
+  background at 90%).
+
+H. SELF-CHECK BEFORE RETURNING
+Run the full geometry test mentally and report it in self_check: no overlaps, no clipping,
+equal left/right margins, button text fits on one line, all text within margins, contrast
+>= 4.5:1 for body and >= 3:1 for large text, no invented facts, fonts loaded. If any
+check fails, fix it and re-check. Never return a spec that fails."""
 
 
 PROMPT_1_BRIEF_ANALYST = """TASK: Turn the raw campaign request into a precise design brief that the art director can execute without guessing.
@@ -198,12 +275,12 @@ PROCESS:
 1. Classify poster_type: festival_greeting | offer_promo | event_announcement | product_showcase | testimonial_quote | educational_tip | hiring | grand_opening | general_announcement.
 2. State the single objective (the action or feeling wanted) and primary audience in one phrase.
 3. Extract content hierarchy and rewrite copy to strictly fit poster copy limits:
-   - headline: max 8 words (ideally 3-6), benefit-led, no filler
-   - subhead: max 15 words, max 2 lines
-   - body: avoid on posters (max 20 words if strictly needed)
-   - cta: max 4 words on the button, starts with a verb (Reserve, Book, Order, Visit, Join, Save)
+   - headline: max 6 words, benefit-led, no filler, no business name in headline
+   - subhead: max 12 words, max 2 lines, no body paragraph
+   - cta: max 3-4 words on the button, starts with a verb (Reserve, Book, Order, Visit, Join, Save)
    - fine_print: only if supplied (dates, terms)
-   - NO emojis anywhere in body, headline, or CTA. Never truncate a sentence mid-word.
+   - NO emojis anywhere. Strictly preserve apostrophes (Rajkumar's, never Rajkumar s).
+   - If event details (date, time, price, venue) are needed but missing, list in needs_input instead of guessing.
 
 Return strictly valid JSON:
 {
@@ -214,10 +291,11 @@ Return strictly valid JSON:
   "copy": {
     "headline": "string",
     "subhead": "string or null",
-    "body": "string or null",
+    "body": null,
     "cta": "string",
     "fine_print": "string or null"
   },
+  "needs_input": [],
   "open_questions": []
 }"""
 
@@ -266,8 +344,14 @@ layout spec. Score each 1-10 and give specific, actionable fixes with element ID
 
 AUTOMATIC REJECT (score 0, return to Designer) if any HARD FAIL RULE from the Designer
 prompt is violated: overlapping/clipped text, button overflow, empty image box,
-invented facts, truncated sentence, low contrast, wrong logo use.
+invented facts, truncated sentence, low contrast, wrong logo use, wrong or missing font
+(system fallback visible), stripped apostrophes or encoding errors (e.g. Rajkumar s),
+badge/button text wider than its container, uneven left/right margins, boxed photo with
+hairline border (web-card look), headline over 6 words, brand name repeated more than once,
+invented claims ("limited spots", "visionary craftsmanship"), flat design with fewer than 3
+depth layers, or any visible truncation.
 
+Score "poster feel": does it look like a designed poster rather than a web component?
 Pass only if overall >= 8.0 and no single criterion < 7. Return strictly valid JSON:
 {
   "scores": {
@@ -281,7 +365,6 @@ Pass only if overall >= 8.0 and no single criterion < 7. Return strictly valid J
   "verdict": "pass|revise"
 }
 Max 3 revision loops, then escalate to human with the best version and notes."""
-
 
 
 PROMPT_6_REVISER = """TASK: Apply the critic's fixes to the previous layout specification and return the complete updated specification.
@@ -311,56 +394,85 @@ class PosterState(TypedDict, total=False):
     iteration: int
     best: Dict[str, Any]
     events: List[Dict[str, Any]]
+    needs_input: List[str]
 
 
-def tighten_poster_copy(copy_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Enforces Part 1 Copy Limits:
-    - Headline: max 8 words (ideally 3-6), max 2-3 lines.
-    - Subhead: max 15 words, max 2 lines.
-    - Body: avoid on posters (max 20 words if strictly needed).
-    - CTA: max 4 words on the button ("Reserve your seat").
-    - No emoji in poster body text. No hashtags on the poster.
-    - Never truncate a sentence mid-word or mid-thought.
+def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> Dict[str, Any]:
+    """Enforces Part 2 Fine-Tuning Rules (v2):
+    - Headline: max 6 words, max 2 lines. Strip redundant business name from headline.
+    - Subhead: max 12 words, max 2 lines. No body paragraph on a poster.
+    - CTA: max 3-4 words on the button ("Reserve a seat").
+    - Clean emojis/hashtags while strictly preserving apostrophes and quotes (Rajkumar's, not Rajkumar s).
+    - Never invent claims or scarcity ("limited spots").
     """
     import re
     def clean_text(s: Optional[str]) -> str:
         if not s:
             return ""
-        # Remove emojis and non-ascii
-        cleaned = re.sub(r'[^\x00-\x7F]+', ' ', str(s))
+        text = str(s)
+        # Normalize typographic quotes & apostrophes to clean standard characters so they are NEVER stripped
+        text = text.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+        text = text.replace("—", " - ").replace("–", "-")
         # Remove hashtags
-        cleaned = re.sub(r'#\w+', '', cleaned)
+        text = re.sub(r'#\w+', '', text)
+        # Remove emojis while strictly preserving all standard ASCII printable chars (32-126) including '
+        cleaned = re.sub(r'[^\x20-\x7E]', '', text)
         return " ".join(cleaned.split()).strip()
 
-    # 1. Headline: max 8 words
+    # 1. Headline: max 6 words, strip redundant business name
     raw_hl = clean_text(copy_dict.get("headline", ""))
-    hl_words = raw_hl.split()
-    if len(hl_words) > 8:
-        if ":" in raw_hl:
-            parts = [p.strip() for p in raw_hl.split(":") if p.strip()]
-            candidate = parts[-1] if len(parts[-1].split()) <= 8 else parts[0]
-            if len(candidate.split()) <= 8:
+    if business_name:
+        b_clean = clean_text(business_name)
+        for b_cand in (b_clean, b_clean.split()[0]):
+            if b_cand and b_cand.lower() in raw_hl.lower():
+                raw_hl = re.sub(re.escape(b_cand), '', raw_hl, flags=re.IGNORECASE).strip()
+        raw_hl = re.sub(r'\b(at|by|in|for)\b\s*$', '', raw_hl, flags=re.IGNORECASE).strip()
+        raw_hl = raw_hl.strip(": -")
+
+    if ":" in raw_hl:
+        parts = [p.strip() for p in raw_hl.split(":") if p.strip()]
+        for candidate in reversed(parts):
+            if len(candidate.split()) <= 6:
                 raw_hl = candidate
-            else:
-                raw_hl = " ".join(hl_words[:8])
-        elif " - " in raw_hl:
-            parts = [p.strip() for p in raw_hl.split(" - ") if p.strip()]
-            raw_hl = parts[0] if len(parts[0].split()) <= 8 else " ".join(hl_words[:8])
-        else:
-            raw_hl = " ".join(hl_words[:8])
+                break
+
+    hl_words = raw_hl.split()
+    if len(hl_words) > 6:
+        raw_hl = " ".join(hl_words[:6])
     headline = raw_hl
 
-    # 2. Subhead: max 15 words
+    # 2. Subhead: max 12 words, max 2 lines, strip fluff & dangling incomplete clauses
     raw_sub = clean_text(copy_dict.get("subhead", ""))
+    for fluff in ("limited spots available", "limited spots", "with vision", "visionary craftsmanship", "the future of coffee"):
+        raw_sub = re.sub(re.escape(fluff), '', raw_sub, flags=re.IGNORECASE)
+    raw_sub = " ".join(raw_sub.split()).strip()
+
+    # Drop dangling incomplete sentences at the end (e.g. 'Our Single')
+    if "." in raw_sub or "!" in raw_sub:
+        sentences = re.split(r'([.!?])', raw_sub)
+        reconstructed = ""
+        for i in range(0, len(sentences) - 1, 2):
+            clause = sentences[i].strip()
+            punct = sentences[i+1]
+            if len((reconstructed + " " + clause).split()) <= 12:
+                reconstructed += (" " if reconstructed else "") + clause + punct
+        if reconstructed:
+            raw_sub = reconstructed
+
     sub_words = raw_sub.split()
-    if len(sub_words) > 15:
-        raw_sub = " ".join(sub_words[:15])
+    if len(sub_words) > 12:
+        raw_sub = " ".join(sub_words[:12])
         if not raw_sub.endswith((".", "!", "?")):
             raw_sub += "."
     subhead = raw_sub if raw_sub else None
 
-    # 3. CTA: max 4 words on button
-    raw_cta = clean_text(copy_dict.get("cta", "") or "Learn More")
+
+    # 3. CTA: max 3-4 words on button
+    raw_cta = clean_text(copy_dict.get("cta", "") or "Reserve a seat")
+    for fluff in ("today limited spots available", "limited spots available", "limited spots", "today", "now"):
+        if len(raw_cta.split()) > 4:
+            raw_cta = re.sub(re.escape(fluff), '', raw_cta, flags=re.IGNORECASE).strip()
+
     cta_words = raw_cta.split()
     if len(cta_words) > 4:
         first_word = cta_words[0].lower()
@@ -369,7 +481,7 @@ def tighten_poster_copy(copy_dict: Dict[str, Any]) -> Dict[str, Any]:
         else:
             cta = " ".join(cta_words[:4]).title()
     else:
-        cta = raw_cta.title()
+        cta = raw_cta.title() if raw_cta else "Reserve A Seat"
 
     return {
         "headline": headline,
@@ -378,6 +490,7 @@ def tighten_poster_copy(copy_dict: Dict[str, Any]) -> Dict[str, Any]:
         "cta": cta,
         "fine_print": copy_dict.get("fine_print")
     }
+
 
 
 # ---------------------------------------------------------------------------
@@ -413,14 +526,26 @@ async def brief_analyst_node(state: PosterState) -> Dict[str, Any]:
             "open_questions": []
         }
 
-    # Strictly enforce Part 1 Copy Limits (no emojis, headline <= 8 words, CTA <= 4 words)
-    brief_data["copy"] = tighten_poster_copy(brief_data.get("copy", {}))
+    # Strictly enforce Part 2 Copy Limits (preserve apostrophes, headline <= 6 words, no business name in headline, CTA <= 4 words)
+    b_name = req.get("business_name", "")
+    brief_data["copy"] = tighten_poster_copy(brief_data.get("copy", {}), business_name=b_name)
+
+    needs_input = []
+    if any(k in (brief_data.get("copy", {}).get("headline", "") + req.get("title", "")).lower() for k in ("tasting", "workshop", "event", "summit", "meetup")):
+        if not req.get("date") and not req.get("time"):
+            needs_input.append("event date and time")
+        if not req.get("price") and not req.get("ticket_link"):
+            needs_input.append("price or booking link (optional)")
+
+    brief_data["needs_input"] = needs_input
 
     return {
         "brief": brief_data,
+        "needs_input": needs_input,
         "iteration": 0,
-        "events": [{"stage": "brief_analyst", "message": f"Brief classified as {brief_data.get('poster_type')} (copy tightened to Part 1 rules)"}]
+        "events": [{"stage": "brief_analyst", "message": f"Brief classified as {brief_data.get('poster_type')} (copy tightened to Part 2 v2 rules)"}]
     }
+
 
 
 
