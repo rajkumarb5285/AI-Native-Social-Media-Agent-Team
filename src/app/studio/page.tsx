@@ -39,6 +39,7 @@ export default function StudioFloorPage() {
   ]);
 
   const [isWorking, setIsWorking] = React.useState(false);
+  const [archetype, setArchetype] = React.useState<string>("hero-text");
   const [activePosterUrl, setActivePosterUrl] = React.useState(
     "http://127.0.0.1:8000/static/generated/posters/66f4e5ff-eb1f-4147-b171-2e6481b01163.png"
   );
@@ -138,6 +139,7 @@ export default function StudioFloorPage() {
           title: objective,
           subtitle: verifiedOffer,
           theme: objective.toLowerCase().includes("diwali") ? "festival_diwali" : "dining_culinary",
+          archetype: archetype,
           phone: phone,
           address: address,
           rating: "Google 5.0 Star Rated",
@@ -325,6 +327,36 @@ export default function StudioFloorPage() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Design Layout Archetype (Prompt Pack) */}
+              <div>
+                <label className="text-stone-300 font-medium block mb-1.5 flex items-center justify-between">
+                  <span>Layout Archetype</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Section 4.5 Spec</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "hero-text", name: "Hero Text", desc: "Bold headline focus" },
+                    { id: "centered-badge", name: "Centered Badge", desc: "Festivals & Openings" },
+                    { id: "offer-burst", name: "Offer Burst", desc: "Flash sales & discounts" },
+                    { id: "quote-card", name: "Quote Card", desc: "Client testimonials" },
+                  ].map((arch) => (
+                    <button
+                      type="button"
+                      key={arch.id}
+                      onClick={() => setArchetype(arch.id)}
+                      className={`p-2 rounded-xl text-left border transition-all ${
+                        archetype === arch.id
+                          ? "bg-amber-500/15 border-amber-500 text-amber-300 font-semibold"
+                          : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200"
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">{arch.name}</div>
+                      <div className="text-[10px] text-stone-500">{arch.desc}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
 

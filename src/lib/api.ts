@@ -236,6 +236,8 @@ export const campaignService = {
     title: string;
     subtitle?: string;
     theme?: string;
+    archetype?: string;
+    cta?: string;
     phone?: string;
     address?: string;
     website?: string;
@@ -245,6 +247,24 @@ export const campaignService = {
     return fetchApi("/api/poster/render", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  },
+
+  async getPosterArchetypes() {
+    return fetchApi("/api/poster/archetypes");
+  },
+
+  async lintPosterSpec(spec: any) {
+    return fetchApi("/api/poster/spec/lint", {
+      method: "POST",
+      body: JSON.stringify(spec),
+    });
+  },
+
+  async renderPosterSpec(spec: any) {
+    return fetchApi("/api/poster/spec/render", {
+      method: "POST",
+      body: JSON.stringify(spec),
     });
   },
 

@@ -119,6 +119,8 @@ class PosterRenderRequest(BaseModel):
     title: str = Field(min_length=1, max_length=150)
     subtitle: Optional[str] = ""
     theme: str = Field(default="festival_diwali")
+    archetype: Optional[str] = Field(default="hero-text")
+    cta: Optional[str] = Field(default=None)
     business_name: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
@@ -156,6 +158,9 @@ from app.services.llm.factory import get_llm_provider
 from app.integrations.crypto import encrypt_token, decrypt_token
 from app.services.festival_calendar import festival_engine
 from app.services.poster_generator import generate_social_poster, TEMPLATES
+from app.services.poster import (
+    PosterSpec, lint_poster_spec, render_poster_spec, get_archetype_template, ARCHETYPE_SPECS
+)
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
@@ -1709,8 +1714,71 @@ async def generate_festival_campaign(req: FestivalGenerateRequest, user: Authent
 def list_templates():
     return {"templates": TEMPLATES, "count": len(TEMPLATES)}
 
+
+@app.get("/api/poster/archetypes")
+def list_poster_archetypes():
+    """Returns the 7 layout archetypes supported by the Poster Design Agent."""
+    return {
+        "archetypes": [
+            {"id": "hero-text", "name": "Hero Text", "best_for": "Announcements, greetings, hiring", "focal": "headline"},
+            {"id": "centered-badge", "name": "Centered Badge", "best_for": "Festivals, grand openings", "focal": "badge_circle"},
+            {"id": "offer-burst", "name": "Offer Burst", "best_for": "Discounts, flash sales", "focal": "burst_text"},
+            {"id": "quote-card", "name": "Quote Card", "best_for": "Testimonials, authority quotes", "focal": "quote_text"},
+            {"id": "split-image-text", "name": "Split Image + Text", "best_for": "Products, dining, real estate", "focal": "photo"},
+            {"id": "event-ticket", "name": "Event Ticket", "best_for": "Events, workshops, dates", "focal": "date_numeral"},
+            {"id": "minimal-editorial", "name": "Minimal Editorial", "best_for": "Luxury, boutique, architecture", "focal": "headline"}
+        ]
+    }
+
+
+@app.post("/api/poster/spec/lint")
+def lint_custom_poster_spec(spec: PosterSpec):
+    """Lints a JSON poster specification against WCAG contrast, 8px grid, margins, and honesty."""
+    report = lint_poster_spec(spec)
+    return report.model_dump()
+
+
+@app.post("/api/poster/spec/render")
+def render_custom_poster_spec(spec: PosterSpec):
+    """Deterministically renders a PosterSpec to full-resolution PNG and thumbnail."""
+    report = lint_poster_spec(spec)
+    result = render_poster_spec(spec)
+    return {
+        "png_base64": result.png_base64,
+        "thumbnail_base64": result.thumbnail_base64,
+        "svg_content": result.svg_content,
+        "lint": report.model_dump(),
+        "width": result.width,
+        "height": result.height
+    }
+
+
 @app.post("/api/poster/render")
 def render_custom_poster(req: PosterRenderRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)):
+    p_color = req.primary_color or req.brand_color or "#6366F1"
+
+    # If archetype is explicitly requested or recognized
+    if req.archetype and req.archetype.lower() in ("hero-text", "centered-badge", "offer-burst", "quote-card", "festival", "offer", "quote"):
+        spec = get_archetype_template(
+            archetype=req.archetype,
+            headline=req.title,
+            subhead=req.subtitle,
+            primary_color=p_color,
+            cta=req.cta or "Learn More",
+            business_name=req.business_name or "Your Business"
+        )
+        report = lint_poster_spec(spec)
+        result = render_poster_spec(spec)
+        return {
+            "poster_url": result.png_base64,
+            "thumbnail_url": result.thumbnail_base64,
+            "svg_content": result.svg_content,
+            "theme": req.theme,
+            "archetype": req.archetype,
+            "primary_color": p_color,
+            "lint": report.model_dump()
+        }
+
     data_uri, static_url = generate_social_poster(
         brand=req.business_name or "Your Business",
         headline=req.title,
@@ -1720,11 +1788,11 @@ def render_custom_poster(req: PosterRenderRequest, user: Optional[AuthenticatedU
         business_address=req.address,
         business_website=req.website,
         rating_text=req.rating,
-        brand_color=req.primary_color or req.brand_color
+        brand_color=p_color
     )
     return {
         "poster_url": data_uri,
         "static_url": static_url,
         "theme": req.theme,
-        "primary_color": req.primary_color or req.brand_color
+        "primary_color": p_color
     }
