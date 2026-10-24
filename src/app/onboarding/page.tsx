@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/ui/header";
 import { Button } from "@/components/ui/button";
@@ -11,998 +10,850 @@ import {
   Upload,
   ArrowRight,
   ArrowLeft,
-  ShieldCheck,
   Building2,
-  User,
   Globe,
   Phone,
   MapPin,
   Tag,
-  Ban,
+  ShieldAlert,
   Clock,
   Palette,
-  X,
+  Layers,
+  Plus,
+  Trash2,
   CheckCircle2,
+  Sliders,
+  DollarSign,
+  AlertTriangle
 } from "lucide-react";
-import { fetchApi, campaignService } from "@/lib/api";
+import { fetchApi } from "@/lib/api";
+
+const INDUSTRY_TAXONOMY = [
+  { id: "sneakers_streetwear", name: "Sneakers & Streetwear", desc: "Bold, high-contrast, diagonal energy, product cutouts" },
+  { id: "fashion_boutique", name: "Fashion Boutique", desc: "Editorial, generous whitespace, serif display, elegant" },
+  { id: "salon_spa", name: "Salon, Spa & Beauty", desc: "Soft organic tones, line art, serene, portrait-focused" },
+  { id: "restaurant_cafe", name: "Restaurant, Cafe & Bakery", desc: "Warm, appetizing, macro food, rich sensory tones" },
+  { id: "gym_fitness", name: "Gym & Fitness", desc: "High contrast, dark mode, dynamic angles, metric stats" },
+  { id: "real_estate", name: "Real Estate & Architecture", desc: "Clean, trustworthy, structured grids, architectural heroes" },
+  { id: "clinic_healthcare", name: "Clinic & Healthcare (Regulated)", desc: "Calm blues/greens, strict factual copy, zero false medical claims" },
+  { id: "jewelry_luxury", name: "Jewelry & Luxury Goods", desc: "Dark or ivory, serif typography, macro product focus, gold accents" },
+  { id: "education_coaching", name: "Education & Coaching", desc: "Friendly, structured info blocks, inspirational, clear CTAs" },
+  { id: "electronics_tech", name: "Electronics & Tech", desc: "Sleek dark UI, restrained gradients, specification highlights" },
+  { id: "auto_bikes", name: "Automotive & Motorcycles", desc: "Dynamic, metallic, angled speed lines, vehicle focus" },
+  { id: "travel_tourism", name: "Travel & Tourism", desc: "Vibrant full-bleed landscapes, postcard motifs, adventurous" },
+  { id: "events_festivals", name: "Events & Festivals", desc: "Ornate, culturally verified motifs, celebratory date blocks" },
+  { id: "local_services", name: "Local Services (Repair, Home)", desc: "Practical, trustworthy, direct contact blocks, service highlights" }
+];
+
+const BUSINESS_MODELS = [
+  { id: "physical_products", name: "Physical Products & Retail", icon: "👟" },
+  { id: "services", name: "Services & Appointments", icon: "💇" },
+  { id: "food_beverage", name: "Food & Beverage", icon: "🍽️" },
+  { id: "real_estate", name: "Property & Real Estate", icon: "🏢" },
+  { id: "healthcare", name: "Healthcare & Wellness", icon: "🩺" },
+  { id: "b2b_tech", name: "B2B & Technology", icon: "💻" },
+  { id: "education", name: "Education & Courses", icon: "🎓" },
+  { id: "creator", name: "Creator & Personal Brand", icon: "✨" }
+];
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = React.useState(1);
-  const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
 
-  // Form Fields
-  const [accountType, setAccountType] = React.useState<"business" | "creator" | "agency">("business");
-  const [businessName, setBusinessName] = React.useState("Rajkumar's Coffee Studio");
-  const [industry, setIndustry] = React.useState("Specialty Cafe & Roastery");
-  const [city, setCity] = React.useState("Pune, Maharashtra");
-  const [website, setWebsite] = React.useState("https://rajkumarstudio.in");
-  const [logoPreview, setLogoPreview] = React.useState<string | null>(null);
-  const [selectedColor, setSelectedColor] = React.useState("#F59E0B");
-  const [customHex, setCustomHex] = React.useState("#F59E0B");
-  const [previewPosterUrl, setPreviewPosterUrl] = React.useState<string>(
-    "http://127.0.0.1:8000/static/generated/posters/66f4e5ff-eb1f-4147-b171-2e6481b01163.png"
-  );
-  const [isUpdatingPoster, setIsUpdatingPoster] = React.useState(false);
-  const [fontPairing, setFontPairing] = React.useState("Fraunces + Geist");
-  const [primaryGoal, setPrimaryGoal] = React.useState("More walk-in customers & footfall");
-  const [customGoal, setCustomGoal] = React.useState("");
-  const [toneVoice, setToneVoice] = React.useState("Warm Editorial");
-  const [phone, setPhone] = React.useState("+91 98200 12345");
-  const [address, setAddress] = React.useState("42 Koregaon Park, Pune 411001");
-  const [hours, setHours] = React.useState("8:00 AM - 11:00 PM Daily");
-  const [approvedOffer, setApprovedOffer] = React.useState("15% Off Cold Brew Reserve on Weekdays");
-  const [bannedWords, setBannedWords] = React.useState("cheapest, fake discount, crypto");
-  const [competitors, setCompetitors] = React.useState<string[]>(["@bluebottle", "@subko.coffee"]);
-  const [newCompetitor, setNewCompetitor] = React.useState("");
+  // 1. Identity & Business Model
+  const [businessName, setBusinessName] = React.useState("");
+  const [legalName, setLegalName] = React.useState("");
+  const [website, setWebsite] = React.useState("");
+  const [businessModel, setBusinessModel] = React.useState("physical_products");
+  const [region, setRegion] = React.useState("US");
+  const [timezone, setTimezone] = React.useState("America/New_York");
+
+  // 2. Industry & Offerings
+  const [industryPrimary, setIndustryPrimary] = React.useState("");
+  const [offeringsDescription, setOfferingsDescription] = React.useState("");
+  const [offerings, setOfferings] = React.useState<Array<{ name: string; price: string; description: string; is_bestseller: boolean; image_url?: string }>>([]);
+  const [newOffName, setNewOffName] = React.useState("");
+  const [newOffPrice, setNewOffPrice] = React.useState("");
+  const [newOffDesc, setNewOffDesc] = React.useState("");
+  const [newOffBestseller, setNewOffBestseller] = React.useState(false);
+  const [newOffImage, setNewOffImage] = React.useState("");
+
+  // 3. Audience & Positioning
+  const [positioning, setPositioning] = React.useState<"budget" | "mid" | "premium" | "luxury">("mid");
+  const [audienceAge, setAudienceAge] = React.useState("20-45");
+  const [audienceLocation, setAudienceLocation] = React.useState("");
+  const [personalityTraits, setPersonalityTraits] = React.useState<string[]>(["Modern", "Confident"]);
+
+  // 4. Brand Assets & Visual Identity
+  const [logoUrl, setLogoUrl] = React.useState("");
+  const [primaryColor, setPrimaryColor] = React.useState("#6366f1");
+  const [secondaryColor, setSecondaryColor] = React.useState("#f59e0b");
+  const [displayFont, setDisplayFont] = React.useState("Inter");
+  const [bodyFont, setBodyFont] = React.useState("Inter");
+
+  // 5. Source Facts & Guardrails
+  const [phone, setPhone] = React.useState("");
+  const [address, setAddress] = React.useState("");
+  const [hours, setHours] = React.useState("");
+  const [approvedOffer, setApprovedOffer] = React.useState("");
+  const [bannedWords, setBannedWords] = React.useState("");
+  const [complianceRules, setComplianceRules] = React.useState("");
   const [approvalMode, setApprovalMode] = React.useState<"human" | "autopilot">("human");
 
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const triggerColorPreview = React.useCallback(
-    async (colorHex: string) => {
-      try {
-        setIsUpdatingPoster(true);
-        const res = await campaignService.renderPoster({
-          business_name: businessName,
-          title: "Diwali Festive Offer: Scale Your Operations With AI Agents",
-          subtitle: "May this auspicious festival illuminate prosperity & new heights",
-          primary_color: colorHex,
-          phone: phone,
-          address: address,
-          rating: "Google 5-Star Customer Rating",
-        });
-        if (res.poster_url) {
-          setPreviewPosterUrl(res.poster_url);
-        }
-      } catch (err) {
-        console.warn("Color poster render error:", err);
-      } finally {
-        setIsUpdatingPoster(false);
-      }
-    },
-    [businessName, phone, address]
-  );
-
-  // Load existing profile from localStorage if available
+  // Load existing draft if any (starts 100% empty for new users)
   React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("nexus_brand_profile");
-      if (saved) {
-        const p = JSON.parse(saved);
-        if (p.businessName) setBusinessName(p.businessName);
-        if (p.industry) setIndustry(p.industry);
-        if (p.city) setCity(p.city);
-        if (p.website) setWebsite(p.website);
-        if (p.primaryColor) {
-          setSelectedColor(p.primaryColor);
-          setCustomHex(p.primaryColor);
+    async function loadDraft() {
+      try {
+        const res = await fetchApi("/api/profile");
+        if (res && res.exists) {
+          if (res.business_name) setBusinessName(res.business_name);
+          if (res.legal_name) setLegalName(res.legal_name);
+          if (res.website) setWebsite(res.website);
+          if (res.business_model) setBusinessModel(res.business_model);
+          if (res.region) setRegion(res.region);
+          if (res.timezone) setTimezone(res.timezone);
+          if (res.industry_primary) setIndustryPrimary(res.industry_primary);
+          if (res.offerings_description) setOfferingsDescription(res.offerings_description);
+          if (res.positioning) setPositioning(res.positioning);
+          if (res.logo_url) setLogoUrl(res.logo_url);
+          if (res.primary_color) setPrimaryColor(res.primary_color);
+          if (res.secondary_color) setSecondaryColor(res.secondary_color);
+          if (res.display_font) setDisplayFont(res.display_font);
+          if (res.body_font) setBodyFont(res.body_font);
+          if (res.phone) setPhone(res.phone);
+          if (res.address) setAddress(res.address);
+          if (res.approval_mode) setApprovalMode(res.approval_mode);
         }
-        if (p.fontPairing) setFontPairing(p.fontPairing);
-        if (p.primaryGoal) setPrimaryGoal(p.primaryGoal);
-        if (p.toneVoice) setToneVoice(p.toneVoice);
-        if (p.phone) setPhone(p.phone);
-        if (p.address) setAddress(p.address);
-        if (p.approvedOffer) setApprovedOffer(p.approvedOffer);
-        if (p.bannedWords) setBannedWords(p.bannedWords);
-        if (p.approvalMode) setApprovalMode(p.approvalMode);
-        if (p.logoPreview) setLogoPreview(p.logoPreview);
-        if (p.competitors) setCompetitors(p.competitors);
-      }
-    } catch (_) {}
+
+        const offRes = await fetchApi("/api/offerings");
+        if (offRes && offRes.offerings) {
+          setOfferings(offRes.offerings);
+        }
+      } catch (_) {}
+    }
+    loadDraft();
   }, []);
 
-  const persistProfile = (goToStudio = false) => {
-    const profile = {
-      accountType,
-      businessName,
-      industry,
-      city,
-      website,
-      logoPreview,
-      primaryColor: selectedColor,
-      fontPairing,
-      primaryGoal: customGoal ? customGoal : primaryGoal,
-      toneVoice,
-      phone,
-      address,
-      hours,
-      approvedOffer,
-      bannedWords,
-      competitors,
-      approvalMode,
-      updatedAt: new Date().toISOString(),
+  const handleAddOffering = async () => {
+    if (!newOffName.trim()) return;
+    const item = {
+      name: newOffName.trim(),
+      price: newOffPrice.trim(),
+      description: newOffDesc.trim(),
+      is_bestseller: newOffBestseller,
+      image_url: newOffImage.trim() || undefined
     };
-
-    localStorage.setItem("nexus_brand_profile", JSON.stringify(profile));
-    window.dispatchEvent(new Event("storage"));
-
-    // Sync to backend business profile
-    fetchApi("/api/business-profile", {
-      method: "POST",
-      body: JSON.stringify({
-        business_name: businessName,
-        category: industry,
-        phone,
-        address,
-        website,
-        tagline: approvedOffer,
-        rating: "5.0 ★★★★★",
-        review_count: "150+ Verified Reviews",
-        primary_color: selectedColor,
-      }),
-    }).catch(() => {});
-
-    setSaveStatus("Brand Kit Synchronized ✓");
-    setTimeout(() => setSaveStatus(null), 2500);
-
-    if (goToStudio) {
-      router.push("/studio");
+    try {
+      await fetchApi("/api/offerings", {
+        method: "POST",
+        body: JSON.stringify(item)
+      });
+      setOfferings((prev) => [...prev, item]);
+      setNewOffName("");
+      setNewOffPrice("");
+      setNewOffDesc("");
+      setNewOffBestseller(false);
+      setNewOffImage("");
+    } catch (err: any) {
+      alert("Failed to save offering: " + err.message);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          setLogoPreview(evt.target.result as string);
-        }
+  const saveProfileData = async (status: "draft" | "complete" = "draft") => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    try {
+      const payload = {
+        business_name: businessName.trim() || "Untitled Business",
+        legal_name: legalName.trim(),
+        category: industryPrimary,
+        industry_primary: industryPrimary,
+        industry_sub: "",
+        offerings_description: offeringsDescription.trim(),
+        business_model: businessModel,
+        phone: phone.trim(),
+        address: address.trim(),
+        website: website.trim(),
+        tagline: approvedOffer.trim(),
+        primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        display_font: displayFont,
+        body_font: bodyFont,
+        positioning: positioning,
+        personality_json: { traits: personalityTraits },
+        audience_json: { age: audienceAge, location: audienceLocation },
+        source_facts_json: { phone, address, hours, approved_offer: approvedOffer },
+        guardrails_json: { banned_words: bannedWords, compliance_rules: complianceRules },
+        region: region,
+        timezone: timezone,
+        onboarding_status: status,
+        approval_mode: approvalMode
       };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  const handleAddCompetitor = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && newCompetitor.trim()) {
-      e.preventDefault();
-      const handle = newCompetitor.trim().startsWith("@")
-        ? newCompetitor.trim()
-        : `@${newCompetitor.trim()}`;
-      if (!competitors.includes(handle)) {
-        setCompetitors([...competitors, handle]);
+      await fetchApi("/api/profile", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      if (status === "complete") {
+        router.push("/studio");
+      } else {
+        setSaveMessage("Draft auto-saved");
+        setTimeout(() => setSaveMessage(null), 3000);
       }
-      setNewCompetitor("");
+    } catch (err: any) {
+      setSaveMessage("Save error: " + err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const removeCompetitor = (handle: string) => {
-    setCompetitors(competitors.filter((c) => c !== handle));
+  const handleNext = async () => {
+    if (step === 1 && !businessName.trim()) {
+      alert("Please enter your business name to continue.");
+      return;
+    }
+    if (step === 2 && !industryPrimary) {
+      alert("Please select your primary industry vertical.");
+      return;
+    }
+    await saveProfileData("draft");
+    setStep((s) => s + 1);
   };
 
-  const sampleCaptions: Record<string, string> = {
-    "Warm Editorial":
-      "Savor the quiet comfort of small-batch roasts in Koregaon Park. Brewed slow for rich, chocolate notes.",
-    "Friendly Casual":
-      "Craving your daily iced latte? Drop by today and enjoy 15% off our signature cold brew!",
-    "High Urgency":
-      "⚡ Flash festive discount! Only 48 hours left to claim your 15% discount on handcrafted cold brew reserve.",
-    "Luxury Gold":
-      "Distinguished single-origin beans, precision roasted for an uncompromising sensory experience.",
+  const handleFinish = async () => {
+    if (!businessName.trim() || !industryPrimary) {
+      alert("Please ensure business name and industry vertical are filled.");
+      return;
+    }
+    await saveProfileData("complete");
   };
 
   return (
-    <div className="min-h-screen bg-[#121110] text-stone-100 flex flex-col pb-16">
-      <Header brandName={businessName} />
+    <div className="min-h-screen bg-[#121110] text-stone-100 flex flex-col font-sans">
+      <Header brandName={businessName || "Register Business"} />
 
-      {saveStatus && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-20 right-6 z-50 px-4 py-2.5 rounded-xl bg-amber-500 text-stone-950 font-semibold text-xs shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-3"
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{saveStatus}</span>
-        </div>
-      )}
-
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Conversational Stepper (7 cols) */}
-          <div className="lg:col-span-7 rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6 shadow-xl">
-            {/* Step Counter */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-amber-500 font-semibold uppercase tracking-wider">
-                Step {step} of 8 ·{" "}
-                {step === 1
-                  ? "Account Type"
-                  : step === 2
-                  ? "Business Identity"
-                  : step === 3
-                  ? "Brand Kit DNA"
-                  : step === 4
-                  ? "Growth Goals"
-                  : step === 5
-                  ? "Tone of Voice"
-                  : step === 6
-                  ? "Source Facts & Safety"
-                  : step === 7
-                  ? "Inspiration Benchmarks"
-                  : "Editorial Mode"}
-              </span>
-
-              {/* Accessible Stepper Tabs */}
-              <div
-                role="tablist"
-                aria-label="Onboarding Steps"
-                className="flex items-center gap-1.5"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                  <button
-                    key={s}
-                    role="tab"
-                    aria-selected={s === step}
-                    aria-label={`Jump to step ${s}`}
-                    onClick={() => {
-                      persistProfile();
-                      setStep(s);
-                    }}
-                    className={`h-2 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                      s === step
-                        ? "bg-amber-500 w-5"
-                        : s < step
-                        ? "bg-amber-500/60 w-2 hover:bg-amber-400"
-                        : "bg-stone-800 w-2 hover:bg-stone-700"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* STEP 1: Who are you creating content for? */}
-            {step === 1 && (
-              <section aria-labelledby="step1-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step1-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Who are you creating content for?
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;Let me know your operational role so our AI crew tunes its research and publishing workflows.&quot;
-                  </p>
-                </div>
-
-                <div
-                  role="radiogroup"
-                  aria-label="Account Type Selection"
-                  className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2"
-                >
-                  {[
-                    {
-                      id: "business",
-                      title: "Local Business / Brand",
-                      desc: "Cafes, clinics, retail stores & local services",
-                    },
-                    {
-                      id: "creator",
-                      title: "Solo Creator / Founder",
-                      desc: "Consultants, influencers & independent makers",
-                    },
-                    {
-                      id: "agency",
-                      title: "Digital Agency",
-                      desc: "Managing multiple client brand workspaces",
-                    },
-                  ].map((t) => {
-                    const isSelected = accountType === t.id;
-                    return (
-                      <div
-                        key={t.id}
-                        role="radio"
-                        aria-checked={isSelected}
-                        tabIndex={0}
-                        onClick={() => setAccountType(t.id as any)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setAccountType(t.id as any);
-                          }
-                        }}
-                        className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                          isSelected
-                            ? "bg-amber-500/10 border-amber-500 text-stone-100 shadow-md"
-                            : "bg-stone-900 border-white/5 text-stone-400 hover:border-white/20"
-                        }`}
-                      >
-                        <div>
-                          <span className="font-semibold text-sm text-stone-100 block">{t.title}</span>
-                          <p className="text-[11px] text-stone-400 mt-1 leading-relaxed">{t.desc}</p>
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-500">
-                          {isSelected ? "✓ Selected" : "Select"}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* STEP 2: Business Details */}
-            {step === 2 && (
-              <section aria-labelledby="step2-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step2-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    What is your business name and location?
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;We&apos;ll anchor these official details across your Google Business Profile and social posts.&quot;
-                  </p>
-                </div>
-
-                <div className="space-y-3.5 text-xs">
-                  <div>
-                    <label htmlFor="businessNameInput" className="text-stone-300 font-medium block mb-1">
-                      Official Brand / Business Name *
-                    </label>
-                    <input
-                      id="businessNameInput"
-                      type="text"
-                      required
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. Rajkumar's Coffee Studio"
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor="industryInput" className="text-stone-300 font-medium block mb-1">
-                        Industry Vertical *
-                      </label>
-                      <input
-                        id="industryInput"
-                        type="text"
-                        required
-                        value={industry}
-                        onChange={(e) => setIndustry(e.target.value)}
-                        placeholder="e.g. Specialty Cafe & Roastery"
-                        className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cityInput" className="text-stone-300 font-medium block mb-1">
-                        City / Operating Region *
-                      </label>
-                      <input
-                        id="cityInput"
-                        type="text"
-                        required
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="e.g. Pune, Maharashtra"
-                        className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="websiteInput" className="text-stone-300 font-medium block mb-1">
-                      Website or Digital Menu Link (Optional)
-                    </label>
-                    <input
-                      id="websiteInput"
-                      type="url"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                      placeholder="https://rajkumarstudio.in"
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 3: Logo & Brand Kit Extraction */}
-            {step === 3 && (
-              <section aria-labelledby="step3-heading" className="space-y-5">
-                <div className="space-y-1.5">
-                  <h1 id="step3-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Upload your logo & confirm brand colors
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;Drop your logo. I&apos;ll extract your primary colors and pair them with typographic scales.&quot;
-                  </p>
-                </div>
-
-                <input
-                  type="file"
-                  id="logoFileInput"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  accept="image/png, image/jpeg, image/svg+xml, image/webp"
-                  aria-label="Upload logo file"
-                  className="hidden"
-                />
-
-                <div
-                  tabIndex={0}
-                  role="button"
-                  aria-label="Upload brand logo file"
-                  onClick={() => fileInputRef.current?.click()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                  className="border border-dashed border-white/20 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-2.5 bg-stone-900/40 hover:border-amber-500/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-stone-200">
-                      {logoPreview ? "✓ Logo Uploaded (Click to swap image)" : "Drop your logo here (SVG, PNG, min 400px)"}
-                    </p>
-                    <p className="text-[11px] text-stone-500 mt-0.5">
-                      or tap to browse your local computer files
-                    </p>
-                  </div>
-                  {logoPreview && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLogoPreview(null);
-                      }}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 mt-1"
-                    >
-                      <X className="w-3 h-3" /> Remove logo
-                    </button>
-                  )}
-                </div>
-
-                {/* Color Palette Selector & Custom Hex Input */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label htmlFor="customHexInput" className="text-xs text-stone-300 font-medium">
-                      Extracted Brand Color & Theme
-                    </label>
-                    <span className="text-[10px] text-emerald-400 font-mono">WCAG AAA Contrast ✓</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { hex: "#F59E0B", label: "Artisan Saffron" },
-                      { hex: "#121110", label: "Warm Charcoal" },
-                      { hex: "#FDFCFB", label: "Linen White" },
-                      { hex: "#22C55E", label: "Emerald Accent" },
-                    ].map((c) => (
-                      <button
-                        type="button"
-                        key={c.hex}
-                        onClick={() => {
-                          setSelectedColor(c.hex);
-                          setCustomHex(c.hex);
-                          triggerColorPreview(c.hex);
-                        }}
-                        className={`flex items-center gap-2 p-2 rounded-xl border transition-colors text-left ${
-                          selectedColor === c.hex
-                            ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
-                            : "bg-stone-900 border-white/10 hover:border-white/20"
-                        }`}
-                      >
-                        <span
-                          className="w-5 h-5 rounded-lg border border-white/20 shrink-0"
-                          style={{ backgroundColor: c.hex }}
-                        />
-                        <div className="overflow-hidden">
-                          <p className="text-[11px] font-semibold text-stone-200">{c.hex}</p>
-                          <p className="text-[9px] text-stone-400 truncate">{c.label}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Custom Hex Picker Input */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="color"
-                      id="nativeColorPicker"
-                      value={selectedColor.startsWith("#") ? selectedColor : "#F59E0B"}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedColor(val);
-                        setCustomHex(val);
-                        triggerColorPreview(val);
-                      }}
-                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
-                      aria-label="Pick color from palette"
-                    />
-                    <input
-                      id="customHexInput"
-                      type="text"
-                      value={customHex}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCustomHex(val);
-                        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                          setSelectedColor(val);
-                          triggerColorPreview(val);
-                        }
-                      }}
-                      placeholder="#F59E0B"
-                      aria-label="Custom Hex Code"
-                      className="flex-1 bg-stone-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-stone-100 font-mono focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="text-[11px] text-stone-400">Custom Brand Hex</span>
-                  </div>
-                </div>
-
-                {/* Font Pairings */}
-                <div className="space-y-2">
-                  <label className="text-xs text-stone-300 font-medium block">
-                    Recommended Font Pairing
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[
-                      { name: "Fraunces + Geist", desc: "Warm editorial elegance for coffee & dining" },
-                      { name: "Clash Display + Inter", desc: "Geometric modern punch for tech & agency" },
-                    ].map((f) => {
-                      const isSelected = fontPairing === f.name;
-                      return (
-                        <button
-                          type="button"
-                          key={f.name}
-                          onClick={() => setFontPairing(f.name)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            isSelected
-                              ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
-                              : "bg-stone-900 border-white/10 opacity-80 hover:opacity-100"
-                          }`}
-                        >
-                          <p className="font-semibold text-xs text-stone-100">{f.name}</p>
-                          <p className="text-[10px] text-stone-400 mt-0.5">{f.desc}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 4: Goals */}
-            {step === 4 && (
-              <section aria-labelledby="step4-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step4-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    What is your primary marketing goal?
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;Our strategy agent will align call-to-actions and captions with this priority.&quot;
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-                  {[
-                    "More walk-in customers & footfall",
-                    "Drive direct online orders & reservations",
-                    "Build local brand authority & 5-star reviews",
-                    "Promote seasonal festival gift boxes",
-                  ].map((g) => {
-                    const isSelected = primaryGoal === g && !customGoal;
-                    return (
-                      <button
-                        type="button"
-                        key={g}
-                        onClick={() => {
-                          setPrimaryGoal(g);
-                          setCustomGoal("");
-                        }}
-                        className={`p-3.5 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? "bg-amber-500/10 border-amber-500 text-stone-100 ring-1 ring-amber-500"
-                            : "bg-stone-900 border-white/5 text-stone-400 hover:border-white/20"
-                        }`}
-                      >
-                        <span className="font-medium block">{g}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="pt-2 text-xs">
-                  <label htmlFor="customGoalInput" className="text-stone-300 font-medium block mb-1">
-                    Or Enter a Custom Goal
-                  </label>
-                  <input
-                    id="customGoalInput"
-                    type="text"
-                    value={customGoal}
-                    onChange={(e) => setCustomGoal(e.target.value)}
-                    placeholder="e.g. Launch winter specialty matcha latte menu"
-                    className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </section>
-            )}
-
-            {/* STEP 5: Tone of Voice */}
-            {step === 5 && (
-              <section aria-labelledby="step5-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step5-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Choose your brand&apos;s tone of voice
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;Listen to how your captions will sound when the copywriter agent writes for your business.&quot;
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {Object.keys(sampleCaptions).map((t) => (
-                    <button
-                      type="button"
-                      key={t}
-                      onClick={() => setToneVoice(t)}
-                      className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
-                        toneVoice === t
-                          ? "bg-amber-500 text-stone-950 font-semibold"
-                          : "bg-stone-900 border-white/10 text-stone-400 hover:text-stone-200"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Sample Caption Box */}
-                <div
-                  aria-live="polite"
-                  className="p-4 rounded-2xl bg-stone-900/90 border border-white/10 space-y-2 shadow-inner"
-                >
-                  <span className="text-[10px] font-mono uppercase text-amber-500 font-semibold">
-                    Live Tone Sample Caption
-                  </span>
-                  <p className="text-xs text-stone-200 italic leading-relaxed">
-                    &quot;{sampleCaptions[toneVoice] || sampleCaptions["Warm Editorial"]}&quot;
-                  </p>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 6: Source Facts & Guardrails */}
-            {step === 6 && (
-              <section aria-labelledby="step6-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step6-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Source Facts & Safety Guardrails
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;The AI crew will only use approved facts below. It will NEVER invent fake prices, discounts, or awards.&quot;
-                  </p>
-                </div>
-
-                <div className="space-y-3.5 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor="phoneInput" className="text-stone-300 font-medium block mb-1">
-                        Official Business Phone *
-                      </label>
-                      <input
-                        id="phoneInput"
-                        type="tel"
-                        required
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="hoursInput" className="text-stone-300 font-medium block mb-1">
-                        Operating Hours
-                      </label>
-                      <input
-                        id="hoursInput"
-                        type="text"
-                        value={hours}
-                        onChange={(e) => setHours(e.target.value)}
-                        className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="addressInput" className="text-stone-300 font-medium block mb-1">
-                      Physical Store Address *
-                    </label>
-                    <input
-                      id="addressInput"
-                      type="text"
-                      required
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="offerInput" className="text-stone-300 font-medium block mb-1">
-                      Approved Offer Allowed in Campaigns *
-                    </label>
-                    <input
-                      id="offerInput"
-                      type="text"
-                      required
-                      value={approvedOffer}
-                      onChange={(e) => setApprovedOffer(e.target.value)}
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="bannedWordsInput" className="text-stone-300 font-medium block mb-1">
-                      Banned Words / Off-Limit Claims
-                    </label>
-                    <input
-                      id="bannedWordsInput"
-                      type="text"
-                      value={bannedWords}
-                      onChange={(e) => setBannedWords(e.target.value)}
-                      placeholder="e.g. cheapest, guaranteed, crypto"
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 7: Competitors / Inspiration */}
-            {step === 7 && (
-              <section aria-labelledby="step7-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step7-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Inspiration Accounts & Benchmarks
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;Add brands whose aesthetic or tone you admire for benchmark research.&quot;
-                  </p>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label htmlFor="competitorInput" className="text-stone-300 font-medium block mb-1">
-                      Add Instagram or Social Handle (Press Enter)
-                    </label>
-                    <input
-                      id="competitorInput"
-                      type="text"
-                      value={newCompetitor}
-                      onChange={(e) => setNewCompetitor(e.target.value)}
-                      onKeyDown={handleAddCompetitor}
-                      placeholder="e.g. @bluebottle or @thirdwavecoffee"
-                      className="w-full bg-stone-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  {/* Handles Badges */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {competitors.map((handle) => (
-                      <span
-                        key={handle}
-                        className="px-2.5 py-1 rounded-lg bg-stone-900 border border-white/10 text-stone-200 text-xs flex items-center gap-1.5"
-                      >
-                        <Tag className="w-3 h-3 text-amber-500" />
-                        <span>{handle}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeCompetitor(handle)}
-                          aria-label={`Remove handle ${handle}`}
-                          className="hover:text-rose-400 ml-1 text-stone-500"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 8: Approval Mode */}
-            {step === 8 && (
-              <section aria-labelledby="step8-heading" className="space-y-4">
-                <div className="space-y-1.5">
-                  <h1 id="step8-heading" className="font-display text-2xl font-semibold text-stone-100">
-                    Choose your Editorial Approval Mode
-                  </h1>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    Avatar Agent: &quot;How would you like to review content created by your studio team?&quot;
-                  </p>
-                </div>
-
-                <div
-                  role="radiogroup"
-                  aria-label="Editorial Approval Mode"
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2"
-                >
-                  <div
-                    role="radio"
-                    aria-checked={approvalMode === "human"}
-                    tabIndex={0}
-                    onClick={() => setApprovalMode("human")}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setApprovalMode("human");
-                      }
-                    }}
-                    className={`p-4 rounded-2xl border text-left space-y-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                      approvalMode === "human"
-                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
-                        : "bg-stone-900 border-white/10 opacity-75 hover:opacity-100"
-                    }`}
-                  >
-                    <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold">
-                      Recommended
-                    </span>
-                    <h3 className="font-semibold text-sm text-stone-100">Human Editorial Approval</h3>
-                    <p className="text-xs text-stone-400 leading-relaxed">
-                      Every campaign requires your 1-tap approval before publishing live to Instagram, Google, or Facebook.
-                    </p>
-                  </div>
-
-                  <div
-                    role="radio"
-                    aria-checked={approvalMode === "autopilot"}
-                    tabIndex={0}
-                    onClick={() => setApprovalMode("autopilot")}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setApprovalMode("autopilot");
-                      }
-                    }}
-                    className={`p-4 rounded-2xl border text-left space-y-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                      approvalMode === "autopilot"
-                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
-                        : "bg-stone-900 border-white/10 opacity-75 hover:opacity-100"
-                    }`}
-                  >
-                    <span className="text-[10px] font-mono text-stone-400 uppercase font-semibold">
-                      Hands-Free
-                    </span>
-                    <h3 className="font-semibold text-sm text-stone-100">Full Autopilot</h3>
-                    <p className="text-xs text-stone-400 leading-relaxed">
-                      Quality Gate automatically schedules & publishes approved drafts once safety threshold is met.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Stepper Navigation Buttons */}
-            <div className="flex items-center justify-between pt-4 border-t border-white/[0.08]">
-              {step > 1 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    persistProfile();
-                    setStep(step - 1);
-                  }}
-                >
-                  <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-                  <span>Back</span>
-                </Button>
-              ) : (
-                <div />
-              )}
-
-              {step < 8 ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="md"
-                  onClick={() => {
-                    persistProfile();
-                    setStep(step + 1);
-                  }}
-                >
-                  <span>Save & Continue</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="md"
-                  onClick={() => persistProfile(true)}
-                  className="shadow-xl shadow-amber-500/20 font-semibold"
-                >
-                  <span>Finish Setup & Launch Studio Floor ⚡</span>
-                </Button>
-              )}
-            </div>
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 space-y-8">
+        {/* Step Indicator Progress Bar */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono text-stone-400">
+            <span>STEP {step} OF 5</span>
+            <span className="text-amber-400 font-semibold">
+              {step === 1 && "1. Identity & Business Model"}
+              {step === 2 && "2. Vertical & Product Offerings"}
+              {step === 3 && "3. Audience & Brand Positioning"}
+              {step === 4 && "4. Brand Kit & Visual Assets"}
+              {step === 5 && "5. Source Facts, Guardrails & Activation"}
+            </span>
+            {saveMessage && <span className="text-emerald-400 text-xs">{saveMessage}</span>}
           </div>
+          <div className="w-full h-1.5 bg-stone-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-indigo-500 transition-all duration-300"
+              style={{ width: `${(step / 5) * 100}%` }}
+            />
+          </div>
+        </div>
 
-          {/* Right Column: Live Brand Kit Preview Mat (5 cols) */}
-          <aside aria-label="Live Brand Kit Preview" className="lg:col-span-5 rounded-3xl bg-[#1A1816] border border-white/[0.1] p-6 shadow-2xl space-y-4">
+        {/* STEP 1: IDENTITY & MODEL */}
+        {step === 1 && (
+          <div className="rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6">
             <div>
-              <span className="text-[11px] font-mono text-amber-500 uppercase font-semibold">
-                Live Brand Kit Preview
-              </span>
-              <p className="text-xs text-stone-400 mt-0.5">
-                Updates dynamically as you calibrate your brand.
+              <h2 className="text-2xl font-bold text-white tracking-tight">Business Identity</h2>
+              <p className="text-stone-400 text-sm mt-1">
+                Enter your real business details. Every field starts blank so your AI agent team builds designs specific to your brand.
               </p>
             </div>
 
-            <div className="rounded-2xl bg-black border border-white/10 p-5 space-y-4 shadow-inner">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg overflow-hidden border border-white/20"
-                  style={{ backgroundColor: `${selectedColor}25`, color: selectedColor }}
-                >
-                  {logoPreview ? (
-                    <img src={logoPreview} alt="Brand Logo Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    "❖"
-                  )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                  Business Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sole Vault Sneakers, Radiant Glow Spa, Prestige Realty"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Legal Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sole Vault Retail LLC"
+                    value={legalName}
+                    onChange={(e) => setLegalName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-stone-100 text-sm">{businessName}</h3>
-                  <p className="text-xs text-stone-400">
-                    {industry} · {city}
-                  </p>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Website (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://yourstore.com"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
                 </div>
               </div>
 
-              {/* Sample Mini Poster Card */}
-              <div className="w-full aspect-square rounded-xl overflow-hidden border border-white/10 relative bg-[#121110]">
-                <img
-                  src={previewPosterUrl}
-                  alt="Live Brand Preview Poster"
-                  className={`w-full h-full object-cover transition-opacity duration-300 ${isUpdatingPoster ? "opacity-60" : "opacity-100"}`}
-                />
-                {isUpdatingPoster && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                    <span className="text-[10px] font-mono text-amber-400 bg-stone-900/90 px-2.5 py-1 rounded-full border border-amber-500/30 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                      Applying Color...
-                    </span>
-                  </div>
-                )}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                  Business Model *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {BUSINESS_MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setBusinessModel(m.id)}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                        businessModel === m.id
+                          ? "bg-amber-500/10 border-amber-500 text-amber-300"
+                          : "bg-stone-900 border-white/10 text-stone-400 hover:border-white/20 hover:text-stone-200"
+                      }`}
+                    >
+                      <span className="text-lg mb-1">{m.icon}</span>
+                      <span className="text-xs font-medium leading-tight">{m.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="pt-2 text-xs text-stone-400 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span>
-                    Palette: <strong className="text-stone-200">{selectedColor}</strong>
-                  </span>
-                  <span className="text-emerald-400 font-mono text-[11px]">✓ Real-time sync</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Primary Region
+                  </label>
+                  <select
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white focus:outline-none focus:border-amber-500 text-sm"
+                  >
+                    <option value="US">United States / Global</option>
+                    <option value="IN">India</option>
+                    <option value="UK">United Kingdom</option>
+                    <option value="EU">European Union</option>
+                    <option value="CA">Canada</option>
+                    <option value="AU">Australia</option>
+                  </select>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>
-                    Typography: <strong className="text-stone-200">{fontPairing}</strong>
-                  </span>
-                  <span className="text-stone-300 font-mono text-[11px]">{phone}</span>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Timezone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. America/New_York or Asia/Kolkata"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white focus:outline-none focus:border-amber-500 text-sm"
+                  />
                 </div>
               </div>
             </div>
-          </aside>
+          </div>
+        )}
+
+        {/* STEP 2: INDUSTRY VERTICAL & OFFERINGS */}
+        {step === 2 && (
+          <div className="rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Industry Vertical & Offerings</h2>
+              <p className="text-stone-400 text-sm mt-1">
+                The visual language, archetype selection, and copy tone of your posters are driven directly by your primary vertical.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                  Select Primary Industry Vertical *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                  {INDUSTRY_TAXONOMY.map((ind) => (
+                    <button
+                      key={ind.id}
+                      type="button"
+                      onClick={() => setIndustryPrimary(ind.id)}
+                      className={`p-3.5 rounded-xl border text-left transition-all ${
+                        industryPrimary === ind.id
+                          ? "bg-amber-500/10 border-amber-500 text-amber-300 shadow-sm"
+                          : "bg-stone-900 border-white/10 text-stone-300 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="font-semibold text-sm text-white mb-0.5">{ind.name}</div>
+                      <div className="text-[11px] text-stone-400 line-clamp-1">{ind.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                  What do you sell or offer? (Free-text brief for AI understanding)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Exclusive limited-edition street sneakers, deadstock retro Jordans, and premium sneaker cleaning kits."
+                  value={offeringsDescription}
+                  onChange={(e) => setOfferingsDescription(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              {/* Offerings list */}
+              <div className="pt-2 border-t border-white/[0.08] space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono">
+                    Product & Service Catalog ({offerings.length})
+                  </h3>
+                </div>
+
+                {offerings.length > 0 && (
+                  <div className="space-y-2">
+                    {offerings.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl bg-stone-900 border border-white/10 flex items-center justify-between text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-white">{item.name}</span>
+                          {item.price && <span className="text-amber-400 font-mono ml-2">{item.price}</span>}
+                          {item.is_bestseller && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                              Bestseller
+                            </span>
+                          )}
+                          {item.description && <p className="text-stone-400 text-[11px]">{item.description}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add offering form */}
+                <div className="p-4 rounded-xl bg-stone-900/60 border border-white/10 space-y-3">
+                  <span className="text-xs font-medium text-stone-300">Add an offering or hero product:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <input
+                      type="text"
+                      placeholder="Item name (e.g. Air Retro High '85)"
+                      value={newOffName}
+                      onChange={(e) => setNewOffName(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-stone-900 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Price (e.g. $190 or Starting at $45)"
+                      value={newOffPrice}
+                      onChange={(e) => setNewOffPrice(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-stone-900 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Product Cutout URL (optional)"
+                      value={newOffImage}
+                      onChange={(e) => setNewOffImage(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-stone-900 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-xs text-stone-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newOffBestseller}
+                        onChange={(e) => setNewOffBestseller(e.target.checked)}
+                        className="rounded bg-stone-800 border-white/20 text-amber-500 focus:ring-0"
+                      />
+                      <span>Mark as best-seller / hero item</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddOffering}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add to Catalog
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: AUDIENCE & POSITIONING */}
+        {step === 3 && (
+          <div className="rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Audience & Brand Positioning</h2>
+              <p className="text-stone-400 text-sm mt-1">
+                Configure your target demographic, market tier, and personality traits.
+              </p>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                  Market Positioning Tier *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { id: "budget", name: "Budget / Value", desc: "Accessible, high utility, deal-oriented" },
+                    { id: "mid", name: "Mid-Market", desc: "Reliable, modern, balanced quality" },
+                    { id: "premium", name: "Premium", desc: "Elevated design, curated, high craft" },
+                    { id: "luxury", name: "Luxury", desc: "Exclusive, understated, bespoke prestige" }
+                  ].map((tier) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      onClick={() => setPositioning(tier.id as any)}
+                      className={`p-3.5 rounded-xl border text-left transition-all ${
+                        positioning === tier.id
+                          ? "bg-amber-500/10 border-amber-500 text-amber-300"
+                          : "bg-stone-900 border-white/10 text-stone-400 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="font-semibold text-white text-sm mb-1">{tier.name}</div>
+                      <div className="text-[11px] text-stone-400">{tier.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Target Age Demographic
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 18-35 or Working Professionals 25-50"
+                    value={audienceAge}
+                    onChange={(e) => setAudienceAge(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Location / Service Area
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Greater Austin Area or Nationwide E-Commerce"
+                    value={audienceLocation}
+                    onChange={(e) => setAudienceLocation(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                  Brand Personality Traits
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {["Bold & Confident", "Minimal & Editorial", "Playful & Vibrant", "Warm & Welcoming", "Technical & Precise", "Direct & Practical"].map((trait) => {
+                    const isSelected = personalityTraits.includes(trait);
+                    return (
+                      <button
+                        key={trait}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setPersonalityTraits((p) => p.filter((t) => t !== trait));
+                          } else {
+                            setPersonalityTraits((p) => [...p, trait]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                          isSelected
+                            ? "bg-amber-500 text-stone-950 border-amber-500 font-semibold"
+                            : "bg-stone-900 text-stone-400 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        {trait}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: BRAND ASSETS & VISUAL IDENTITY */}
+        {step === 4 && (
+          <div className="rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Brand Kit & Visual Assets</h2>
+              <p className="text-stone-400 text-sm mt-1">
+                Customize brand colors and font selections. These tokens are injected into all generated posters and flyers.
+              </p>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                  Brand Logo URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://yourstore.com/logo.png"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                />
+                <span className="text-[11px] text-stone-500 mt-1 block">
+                  Leave empty if you don't have an image logo; the poster designer will render a styled typographic wordmark.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                    Primary Brand Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-stone-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500 uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                    Secondary Accent Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={secondaryColor}
+                      onChange={(e) => setSecondaryColor(e.target.value)}
+                      className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={secondaryColor}
+                      onChange={(e) => setSecondaryColor(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-stone-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500 uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Display Headline Font
+                  </label>
+                  <select
+                    value={displayFont}
+                    onChange={(e) => setDisplayFont(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white focus:outline-none focus:border-amber-500 text-sm"
+                  >
+                    <option value="Inter">Inter (Clean Modern Sans)</option>
+                    <option value="Fraunces">Fraunces (Warm Editorial Serif)</option>
+                    <option value="Outfit">Outfit (Bold Geometric)</option>
+                    <option value="Cinzel">Cinzel (Luxury Classical Serif)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Body & Subline Font
+                  </label>
+                  <select
+                    value={bodyFont}
+                    onChange={(e) => setBodyFont(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white focus:outline-none focus:border-amber-500 text-sm"
+                  >
+                    <option value="Inter">Inter (Optimized Legibility)</option>
+                    <option value="Roboto">Roboto (Neutral Sans)</option>
+                    <option value="Geist">Geist (High Precision)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: SOURCE FACTS, GUARDRAILS & ACTIVATION */}
+        {step === 5 && (
+          <div className="rounded-3xl bg-[#1A1816] border border-white/[0.08] p-6 lg:p-8 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Source Facts & Guardrails</h2>
+              <p className="text-stone-400 text-sm mt-1">
+                Establish facts the AI is strictly permitted to state, and guardrails it must never violate.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Contact Phone (For Poster Footer)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +1 (512) 555-0199"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                    Operating Hours
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mon-Sat 10:00 AM - 8:00 PM"
+                    value={hours}
+                    onChange={(e) => setHours(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                  Physical Address / Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 104 E 5th St, Austin, TX 78701"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-1.5">
+                  Approved Promotional Offer / Value Hook
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 20% off all retro drops with code RETRO20"
+                  value={approvedOffer}
+                  onChange={(e) => setApprovedOffer(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-white/10 text-white placeholder-stone-600 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-rose-400 font-mono mb-1.5 flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Prohibited Claims & Banned Words ("Never Say")
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. cheapest, guaranteed cure, miracle, fake scarcity, crypto, no-risk"
+                  value={bannedWords}
+                  onChange={(e) => setBannedWords(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-stone-900 border border-rose-900/30 text-white placeholder-stone-600 focus:outline-none focus:border-rose-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 font-mono mb-2">
+                  Publishing Approval Mode
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setApprovalMode("human")}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                      approvalMode === "human"
+                        ? "bg-amber-500/10 border-amber-500 text-amber-300"
+                        : "bg-stone-900 border-white/10 text-stone-400 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="font-semibold text-white text-sm mb-0.5">Human Approval (Recommended)</div>
+                    <div className="text-[11px] text-stone-400">
+                      Designs and copy are staged in Review for 1-tap approval before publishing.
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApprovalMode("autopilot")}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                      approvalMode === "autopilot"
+                        ? "bg-amber-500/10 border-amber-500 text-amber-300"
+                        : "bg-stone-900 border-white/10 text-stone-400 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="font-semibold text-white text-sm mb-0.5">Autonomous Autopilot</div>
+                    <div className="text-[11px] text-stone-400">
+                      High-confidence designs passing automated QA publish directly on schedule.
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation Buttons */}
+        <div className="flex items-center justify-between pt-4 border-t border-white/[0.08]">
+          {step > 1 ? (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setStep((s) => s - 1)}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Previous Step
+            </Button>
+          ) : (
+            <div />
+          )}
+
+          {step < 5 ? (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleNext}
+              disabled={isSaving}
+              className="flex items-center gap-2 font-semibold shadow-md shadow-amber-500/20"
+            >
+              {isSaving ? "Saving..." : "Save & Continue"}
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleFinish}
+              disabled={isSaving}
+              className="flex items-center gap-2 font-bold shadow-xl shadow-amber-500/20 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500"
+            >
+              <Sparkles className="w-4 h-4" />
+              {isSaving ? "Activating Team..." : "Complete Registration & Enter Studio"}
+            </Button>
+          )}
         </div>
       </main>
     </div>

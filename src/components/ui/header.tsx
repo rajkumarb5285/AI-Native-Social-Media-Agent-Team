@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, Sparkles, ChevronDown, CheckCircle2, ShieldCheck, LogIn, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AuthModal } from "@/components/auth/auth-modal";
 import { getAuthToken, removeAuthToken, authService } from "@/lib/api";
 
 interface HeaderProps {
@@ -15,43 +14,39 @@ interface HeaderProps {
 
 export function Header({
   onOpenCommand,
-  brandName = "Rajkumar's Coffee Studio",
+  brandName,
 }: HeaderProps) {
   const pathname = usePathname();
-  const [brand, setBrand] = React.useState(brandName);
-  const [isAuthModalOpen, setIsAuthModalOpen] = React.useState(false);
+  const [brand, setBrand] = React.useState<string>(brandName || "");
   const [currentUser, setCurrentUser] = React.useState<any>(null);
 
-  React.useEffect(() => {
-    const readBrand = () => {
-      try {
-        const saved = localStorage.getItem("nexus_brand_profile");
-        if (saved) {
-          const p = JSON.parse(saved);
-          if (p.businessName) setBrand(p.businessName);
-        }
-      } catch (_) {}
-    };
-    readBrand();
-    window.addEventListener("storage", readBrand);
-    return () => window.removeEventListener("storage", readBrand);
-  }, [brandName]);
-
-  React.useEffect(() => {
-    const token = getAuthToken();
-    if (token) {
-      authService.getProfile().then((res) => {
-        if (res.user) setCurrentUser(res.user);
-      }).catch(() => {
-        // Fallback demo user
-        setCurrentUser({ email: "rajkumar@studio.local", role: "admin" });
-      });
+  const fetchSession = React.useCallback(async () => {
+    try {
+      const user = await authService.getProfile();
+      if (user) {
+        setCurrentUser(user);
+        if (user.business_name) setBrand(user.business_name);
+      }
+    } catch (_) {
+      setCurrentUser(null);
     }
   }, []);
 
+  React.useEffect(() => {
+    fetchSession();
+
+    const handleFocus = () => fetchSession();
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [fetchSession]);
+
   const handleSignOut = () => {
-    removeAuthToken();
-    setCurrentUser(null);
+    authService.logout();
   };
 
   const navLinks = [
@@ -139,26 +134,17 @@ export function Header({
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
+              <Link
+                href="/login"
                 className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-amber-500 text-stone-950 font-semibold text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Sign In / Google</span>
-              </button>
+                <span>Sign In with Google</span>
+              </Link>
             )}
           </div>
         </div>
       </header>
-
-      {/* Auth Modal with Google OAuth & MFA */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(user) => {
-          setCurrentUser(user);
-        }}
-      />
     </>
   );
 }

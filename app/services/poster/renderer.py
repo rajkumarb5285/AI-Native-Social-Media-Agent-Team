@@ -461,15 +461,18 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
     # 3. Design Device: Inset Frame (1px line at 15% opacity inset 32px with top gap)
     _draw_inset_frame(image, accent_rgb, w, h)
 
-    # 4. Subject-Relative Structural Copper Ring
-    # Subject visual center: x=540, y=470; diameter = 630 (radius 315)
-    # Top y = 155 (clears header row y<=128 by 27px >= 24px)
-    # Bottom y = 785 (clears text stack y>=812 by 27px >= 24px)
+    # 4. Subject-Relative Structural Ring / Frame
+    # Render only when requested by archetype or spec design notes
     ring_cx, ring_cy, ring_diam = A_C, 470, 630
-    _draw_subject_ring(image, accent_rgb, ring_cx, ring_cy, ring_diam)
+    shapes_patterns = str(spec.shapes or []) + str(spec.patterns or []) + str(spec.design_notes or {})
+    should_draw_ring = any(k in shapes_patterns.lower() for k in ("ring", "circle", "copper_ring", "framing"))
+    if should_draw_ring:
+        _draw_subject_ring(image, accent_rgb, ring_cx, ring_cy, ring_diam)
 
-    # 5. Design Device: Curved Steam Strokes (authentic motif above glass rim)
-    _draw_curved_steam(image, accent_rgb)
+    # 5. Design Device: Curved Steam Strokes (ONLY when explicitly requested for coffee/hot beverage)
+    should_draw_steam = any(k in shapes_patterns.lower() for k in ("steam", "coffee_steam", "hot_steam"))
+    if should_draw_steam:
+        _draw_curved_steam(image, accent_rgb)
 
     # 6. Scrims:
     # A. Top scrim: linear-gradient(180deg, rgba(bg,0.65) 0%, rgba(bg,0) 22%) for logo contrast
@@ -537,12 +540,14 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
     rule_h = 2
 
     # B. Eyebrow: Inter 600, 26px, uppercase, tracking +0.12em, accent color
-    raw_eb = eyebrow_el.text if eyebrow_el and eyebrow_el.text else "SINGLE-ORIGIN COLD BREW"
+    raw_eb = eyebrow_el.text if eyebrow_el and eyebrow_el.text else ""
+    if not raw_eb:
+        raw_eb = f"✦ {business_name.upper()}" if business_name else "FEATURED ANNOUNCEMENT"
     # Strip any decorative unicode symbols (like ✦) that might render tofu boxes
-    raw_eb = re.sub(r"[^\w\s\-–—/]", "", raw_eb).strip()
-    if not raw_eb or "RAJKUMAR" in raw_eb.upper():
-        raw_eb = "SINGLE-ORIGIN COLD BREW"
-    eyebrow_text = sanitize_poster_text(raw_eb).upper()
+    clean_eb = re.sub(r"[^\w\s\-–—/]", "", raw_eb).strip()
+    if not clean_eb:
+        clean_eb = "FEATURED ANNOUNCEMENT"
+    eyebrow_text = sanitize_poster_text(clean_eb).upper()
     font_eyebrow = _get_font(spec.fonts.text, 26, weight=600)
     eyebrow_bbox = draw.textbbox((0, 0), eyebrow_text, font=font_eyebrow)
     eyebrow_h = eyebrow_bbox[3] - eyebrow_bbox[1]
@@ -555,15 +560,19 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
         h_text = re.sub(re.escape(b_word), "", h_text, flags=re.IGNORECASE).strip(": -")
     h_text = re.sub(r"\b(at|by|in|for)\s*(Coffee)?\s*$", "", h_text, flags=re.IGNORECASE).strip(": -")
 
-    # If the headline is the classic coffee tasting poster or matches single origin tasting, use the Part 3 Masterclass copy
+    # If the headline is explicitly single-origin coffee tasting, retain Part 3 Masterclass copy
     if any(k in h_text.lower() for k in ("one origin", "slow pour", "single origin", "single-origin")):
         h_lines = ["One origin.", "One slow pour."]
     elif "\n" in h_text:
         h_lines = [line.strip() for line in h_text.split("\n") if line.strip()][:2]
     else:
         h_words = h_text.split()
-        if len(h_words) > 6 or len(h_words) == 0:
-            h_lines = ["One origin.", "One slow pour."]
+        if len(h_words) == 0:
+            h_lines = [sanitize_poster_text(business_name or "Featured Release")]
+        elif len(h_words) > 6:
+            # Wrap to 2 lines of max 3-4 words each, preserving real business headline
+            mid = min(4, (len(h_words) + 1) // 2)
+            h_lines = [" ".join(h_words[:mid]), " ".join(h_words[mid:6])]
         elif len(h_words) > 3:
             mid = (len(h_words) + 1) // 2
             h_lines = [" ".join(h_words[:mid]), " ".join(h_words[mid:])]
@@ -587,27 +596,36 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
     headline_total_h = len(h_lines) * h_line_height
 
     # D. Subhead: Inter 400, 34px, lh 48px, max 1 line (<= 44 chars)
-    s_text = sanitize_poster_text(subhead_el.text if subhead_el and subhead_el.text else f"A guided tasting at {business_name}")
+    s_text = sanitize_poster_text(subhead_el.text if subhead_el and subhead_el.text else "")
     # Strip unverified claims
     for fluff in ("limited spots available", "limited spots", "with vision", "visionary craftsmanship", "the future of coffee"):
         s_text = re.sub(re.escape(fluff), '', s_text, flags=re.IGNORECASE)
     s_text = s_text.replace("!", ".").strip()
     if len(s_text) > 44 or not s_text or s_text.endswith(("single", "the", "of", "and")):
-        s_text = f"A guided tasting at {business_name}"
-        if len(s_text) > 44:
-            s_text = "A guided single-origin tasting"
+        if business_name:
+            if any(k in business_name.lower() for k in ("coffee", "cafe", "roast", "brew")):
+                s_text = f"A guided tasting at {business_name}"
+                if len(s_text) > 44:
+                    s_text = "A guided single-origin tasting"
+            else:
+                s_text = f"Experience quality at {business_name}"
+                if len(s_text) > 44:
+                    s_text = f"Welcome to {business_name}"
+        else:
+            s_text = "Designed for exceptional quality."
 
     font_subhead = _get_font(spec.fonts.text, 34, weight=400)
     subhead_h = 48
 
     # E. Footer Row: CTA pill + Meta handle, midline center_y = 1230, height = 80px
     footer_midline_y = 1230
-    cta_text_str = sanitize_poster_text(cta_text_el.text if cta_text_el and cta_text_el.text else "Reserve a seat")
+    default_cta = "Reserve a seat" if any(k in (business_name or "").lower() for k in ("coffee", "cafe", "roast", "dining")) else "Learn More"
+    cta_text_str = sanitize_poster_text(cta_text_el.text if cta_text_el and cta_text_el.text else default_cta)
     for fluff in ("today limited spots available", "limited spots available", "limited spots", "today", "now"):
         cta_text_str = re.sub(re.escape(fluff), '', cta_text_str, flags=re.IGNORECASE).strip()
     cta_words = cta_text_str.split()
     if len(cta_words) > 3 or len(cta_words) == 0:
-        cta_text_str = "Reserve a seat"
+        cta_text_str = default_cta
     else:
         cta_text_str = " ".join(cta_words).title()
 

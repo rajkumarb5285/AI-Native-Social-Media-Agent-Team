@@ -1,0 +1,15 @@
+{
+  "framework": "nextjs",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://ai-native-social-agent-team.onrender.com/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://ai-native-social-agent-team.onrender.com/auth/:path*"
+    }
+  ]
+}

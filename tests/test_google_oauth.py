@@ -160,7 +160,7 @@ def test_google_callback_happy_path_sets_session_cookie(client):
         assert callback_resp.status_code == 303
         redir = callback_resp.headers.get("location", "")
         assert "auth_success=true" in redir
-        assert "token=" in redir
+        assert "token=" not in redir  # Auth token must never appear in the redirect URL
 
         # Check session cookie is set
         cookies = callback_resp.cookies
@@ -241,12 +241,21 @@ def test_appwrite_google_auth_exchange(client):
 
 
 def test_google_access_token_auth(client):
-    """Verify Google Identity Services Token Client access_token authenticates and returns user."""
-    resp = client.post("/api/auth/google", json={
-        "access_token": "simulated_google:eyJlbWFpbCI6ICJnaXMuYWNjZXNzLnRva2VuQGdtYWlsLmNvbSIsICJuYW1lIjogIkdJUyBUb2tlbiBVc2VyIn0="
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "access_token" in data
-    assert data["user"]["email"] == "gis.access.token@gmail.com"
+    """Verify Google OAuth access_token authenticates by verifying against Google UserInfo API."""
+    mock_userinfo = {
+        "sub": "google_sub_gis_12345",
+        "email": "gis.access.token@gmail.com",
+        "name": "GIS Token User",
+        "picture": "https://lh3.googleusercontent.com/a/avatar",
+        "email_verified": True
+    }
+    with patch("httpx.AsyncClient.get") as mock_get:
+        mock_get.return_value = AsyncMock(status_code=200, json=lambda: mock_userinfo)
+        resp = client.post("/api/auth/google", json={
+            "access_token": "valid_google_oauth_bearer_token_xyz"
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "access_token" in data
+        assert data["user"]["email"] == "gis.access.token@gmail.com"
 

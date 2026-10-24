@@ -45,9 +45,6 @@ export default function ConnectAccountsPage() {
   const loadConnections = async () => {
     setIsLoading(true);
     try {
-      if (!getAuthToken()) {
-        await authService.getDevToken();
-      }
       const data = await campaignService.getConnections();
       const conns = data.connections || [];
       if (conns.length > 0) {
@@ -60,36 +57,10 @@ export default function ConnectAccountsPage() {
             tokenHealthDays: 60,
             lastSyncedText: "Just now",
             permissions: c.scopes || ["Direct Publishing", "Analytics Sync"],
-          }))
-        );
+          })
+        ));
       } else {
-        // Seed default verified starter channels for seamless demo
-        setConnections([
-          {
-            platform: "instagram",
-            account_name: "@rajkumar_studio",
-            is_active: true,
-            tokenHealthDays: 58,
-            lastSyncedText: "12 mins ago",
-            permissions: ["Direct Publishing", "Reels", "Insights"],
-          },
-          {
-            platform: "gmb",
-            account_name: "Koregaon Park Branch (Location ID #18928)",
-            is_active: true,
-            tokenHealthDays: 60,
-            lastSyncedText: "5 mins ago",
-            permissions: ["Google Maps Updates", "Search Knowledge Panel", "Reviews Sync"],
-          },
-          {
-            platform: "facebook",
-            account_name: "Rajkumar's Coffee Roasters (Page Admin)",
-            is_active: true,
-            tokenHealthDays: 60,
-            lastSyncedText: "1 hour ago",
-            permissions: ["Page Feed Publishing", "Photo Uploads", "Page Read"],
-          },
-        ]);
+        setConnections([]);
       }
     } catch (err) {
       console.warn("Could not load connections:", err);

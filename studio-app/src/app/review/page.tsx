@@ -25,24 +25,17 @@ export default function ReviewApprovePage() {
   const [isApproved, setIsApproved] = React.useState(false);
   const [isPublished, setIsPublished] = React.useState(false);
   const [feedbackToast, setFeedbackToast] = React.useState<string | null>(null);
-  const [runId, setRunId] = React.useState<string>("ae438190-9546-4604-b942-55fe5d7afbbc");
+  const [runId, setRunId] = React.useState<string>("");
   const [isRevising, setIsRevising] = React.useState(false);
   const [revisionNotes, setRevisionNotes] = React.useState("");
 
-  const [posterUrl, setPosterUrl] = React.useState(
-    "http://127.0.0.1:8000/static/generated/posters/66f4e5ff-eb1f-4147-b171-2e6481b01163.png"
-  );
-  const [headline, setHeadline] = React.useState(
-    "Diwali Festive Special: Cold Brew Gift Reserve"
-  );
+  const [posterUrl, setPosterUrl] = React.useState<string | null>(null);
+  const [headline, setHeadline] = React.useState<string>("");
 
-  const [captions, setCaptions] = React.useState({
-    instagram:
-      "Celebrate the festival of lights with our limited-batch Cold Brew Reserve, slow-steeped for 24 hours in Koregaon Park. Savor the warm notes of dark chocolate and toasted almond.\n\nEnjoy 15% off and complimentary doorstep delivery on festive gift boxes across Pune.\n\n#Diwali2026 #PuneEats #ArtisanalCoffee #PuneFoodies #ColdBrew",
-    gmb:
-      "Celebrate Diwali with Rajkumar's Coffee Studio! Enjoy 15% Off our handcrafted Cold Brew Reserve on weekdays. Visit our Koregaon Park cafe or call +91 98200 12345 for directions & fresh bean gift packs. Rated 5.0 on Google.",
-    facebook:
-      "This Diwali, bring warmth and quiet luxury to your gatherings. Rajkumar's Coffee Studio is offering 15% off our signature Cold Brew Reserve for all weekday visits.\n\nCrafted with ethically-sourced beans, precision roasted in Pune. Drop by 42 Koregaon Park or order your festive packs today!",
+  const [captions, setCaptions] = React.useState<Record<string, string>>({
+    instagram: "",
+    gmb: "",
+    facebook: "",
   });
 
   const showToast = (msg: string) => {
@@ -81,10 +74,6 @@ export default function ReviewApprovePage() {
         }));
       }
     } catch (_) {}
-
-    if (!getAuthToken()) {
-      authService.getDevToken().catch(() => {});
-    }
   }, []);
 
   const handleApproveAndSchedule = async () => {
@@ -211,7 +200,7 @@ export default function ReviewApprovePage() {
             <div className="rounded-3xl bg-[#1A1816] border border-white/[0.1] p-6 shadow-2xl flex flex-col items-center">
               <div className="relative w-full max-w-[480px] aspect-square rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black">
                 <img
-                  src={posterUrl}
+                  src={posterUrl || undefined}
                   alt={headline}
                   className="w-full h-full object-cover"
                 />
@@ -220,7 +209,7 @@ export default function ReviewApprovePage() {
               {/* Raw Asset Downloads */}
               <div className="w-full max-w-[480px] flex items-center justify-between gap-3 mt-4 pt-4 border-t border-white/[0.08]">
                 <a
-                  href={posterUrl}
+                  href={posterUrl || "#"}
                   download="rajkumar_festive_poster.png"
                   target="_blank"
                   rel="noreferrer"

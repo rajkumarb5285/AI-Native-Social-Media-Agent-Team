@@ -25,6 +25,10 @@ from app.services.poster.spec import PosterSpec, CanvasConfig, BackgroundConfig,
 from app.services.poster.linter import lint_poster_spec, LintReport
 from app.services.poster.renderer import render_poster_spec, RenderResult
 from app.services.poster.archetypes import get_archetype_template
+from app.services.poster.qa_suite import run_full_poster_qa, QASuiteReport, NumericAdjustment
+from app.services.poster.vision_critic import evaluate_vision_critic, apply_numeric_revisions, VisionCritiqueReport
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -474,11 +478,11 @@ def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> D
     raw_hl = " ".join(raw_hl.split()).strip()
     hl_words = raw_hl.split()
     if len(hl_words) > 6 or len(hl_words) == 0:
-        # Rewrite to concise on-brand single-origin theme
-        if any(w in raw_hl.lower() for w in ("cold brew", "pour", "origin", "roast", "coffee", "tasting")):
+        # Rewrite to concise on-brand theme
+        if any(w in (raw_hl + (business_name or "")).lower() for w in ("cold brew", "pour", "origin", "roast", "coffee", "tasting")):
             headline = "One origin.\nOne slow pour."
         else:
-            headline = " ".join(hl_words[:6]) if hl_words else "Single-Origin Tasting"
+            headline = " ".join(hl_words[:6]) if hl_words else (f"Welcome to {clean_text(business_name)}" if business_name else "Signature Collection")
     else:
         headline = raw_hl
 
@@ -489,15 +493,20 @@ def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> D
     raw_sub = raw_sub.replace("!", ".").replace("?", ".")
     raw_sub = " ".join(raw_sub.split()).strip()
 
-    # If subhead is truncated or ends mid-sentence ("...art of single"), replace with clean Source Fact
+    # If subhead is truncated or ends mid-sentence, replace with clean on-brand copy
     if len(raw_sub) > 44 or not raw_sub or raw_sub.endswith(("single", "the", "of", "and", "with", "a")):
         if business_name:
             clean_bname = smart_typography(business_name)
-            subhead = f"A guided tasting at {clean_bname}"
-            if len(subhead) > 44:
-                subhead = "A guided single-origin tasting"
+            if any(k in (business_name + raw_hl).lower() for k in ("coffee", "cafe", "roast", "brew", "pour")):
+                subhead = f"A guided tasting at {clean_bname}"
+                if len(subhead) > 44:
+                    subhead = "A guided single-origin tasting"
+            else:
+                subhead = f"Experience quality at {clean_bname}"
+                if len(subhead) > 44:
+                    subhead = f"Welcome to {clean_bname}"
         else:
-            subhead = "A guided single-origin tasting"
+            subhead = "Crafted for exceptional quality."
     else:
         # Guarantee single line <= 44 chars
         if len(raw_sub) > 44:
@@ -506,24 +515,28 @@ def tighten_poster_copy(copy_dict: Dict[str, Any], business_name: str = "") -> D
             subhead = raw_sub
 
     # 3. CTA: strictly max 3 words
-    raw_cta = clean_text(copy_dict.get("cta", "") or "Reserve a seat")
+    is_coffee = any(k in ((business_name or "") + raw_hl).lower() for k in ("coffee", "cafe", "roast", "brew", "cold brew"))
+    default_cta = "Reserve a seat" if is_coffee else "Learn More"
+    raw_cta = clean_text(copy_dict.get("cta", "") or default_cta)
     for fluff in ("today limited spots available", "limited spots available", "limited spots", "today", "now", "available"):
         raw_cta = re.sub(re.escape(fluff), '', raw_cta, flags=re.IGNORECASE).strip()
 
     cta_words = raw_cta.split()
     if len(cta_words) > 3 or len(cta_words) == 0:
-        cta = "Reserve a seat"
+        cta = default_cta
     else:
         cta = " ".join(cta_words).title()
 
     # 4. Eyebrow & Badge
-    raw_eyebrow = clean_text(copy_dict.get("eyebrow", "") or "SINGLE-ORIGIN COLD BREW").upper()
+    default_eb = "SINGLE-ORIGIN COLD BREW" if is_coffee else (f"✦ {clean_text(business_name).upper()}" if business_name else "FEATURED")
+    raw_eyebrow = clean_text(copy_dict.get("eyebrow", "") or default_eb).upper()
     if len(raw_eyebrow) > 28:
-        raw_eyebrow = "SINGLE-ORIGIN COLD BREW"
+        raw_eyebrow = default_eb[:28]
 
-    raw_badge = clean_text(copy_dict.get("badge", "") or "TASTING SESSION").upper()
+    default_badge = "TASTING SESSION" if is_coffee else "FEATURED"
+    raw_badge = clean_text(copy_dict.get("badge", "") or default_badge).upper()
     if len(raw_badge) > 16:
-        raw_badge = "TASTING SESSION"
+        raw_badge = default_badge[:16]
 
     return {
         "headline": smart_typography(headline),
@@ -605,69 +618,8 @@ async def art_director_node(state: PosterState) -> Dict[str, Any]:
     has_custom_color = bool(user_color and user_color.upper() != "#F59E0B")
 
 
-    # Intelligent Canva theme and archetype inference
-    if any(k in context_text for k in ("coffee", "cafe", "food", "dining", "roast", "restaurant", "bakery", "bistro", "culinary", "brew", "cold brew", "tasting", "espresso", "latte", "tea", "drink", "beverage", "barista", "roastery")):
-        selected_archetype = req.get("archetype") or "split-image-text"
-        accent = user_color if has_custom_color else "#D97706"
-        palette = {
-            "background": "#140D07",
-            "surface": "#24170F",
-            "primary": "#FFF8F0",
-            "muted": "#D1C7BD",
-            "accent": accent
-        }
-        type_pairing = {"display": "Playfair Display", "text": "Inter"}
-
-
-    elif any(k in title for k in ("summit", "conference", "event", "workshop", "meetup", "ticket", "hackathon")):
-        selected_archetype = req.get("archetype") or "event-ticket"
-        accent = user_color if has_custom_color else "#3B82F6"
-        palette = {
-            "background": "#050B18",
-            "surface": "#0A1329",
-            "primary": "#F8FAFC",
-            "muted": "#93C5FD",
-            "accent": accent
-        }
-        type_pairing = {"display": "Space Grotesk", "text": "Inter"}
-
-    elif any(k in title for k in ("off", "sale", "discount", "deal", "clearance", "flash")):
-        selected_archetype = req.get("archetype") or "offer-burst"
-        accent = user_color if has_custom_color else "#EF4444"
-        palette = {
-            "background": "#0A0A0A",
-            "surface": "#1C0A0A",
-            "primary": "#FFFFFF",
-            "muted": "#CBD5E1",
-            "accent": accent
-        }
-        type_pairing = {"display": "Playfair Display", "text": "Inter"}
-
-    elif any(k in title for k in ("review", "quote", "testimonial", "star", "google 5", "ratings")):
-        selected_archetype = req.get("archetype") or "quote-card"
-        accent = user_color if has_custom_color else "#10B981"
-        palette = {
-            "background": "#06281E",
-            "surface": "#0A3B2D",
-            "primary": "#ECFDF5",
-            "muted": "#A7F3D0",
-            "accent": accent
-        }
-        type_pairing = {"display": "Playfair Display", "text": "Inter"}
-
-    elif any(k in title for k in ("luxury", "boutique", "monograph", "silence", "architect", "atelier")):
-        selected_archetype = req.get("archetype") or "minimal-editorial"
-        accent = user_color if has_custom_color else "#78716C"
-        palette = {
-            "background": "#F5F5F4",
-            "surface": "#E7E5E4",
-            "primary": "#1C1917",
-            "muted": "#57534E",
-            "accent": accent
-        }
-        type_pairing = {"display": "Playfair Display", "text": "Inter"}
-
-    elif any(k in title for k in ("diwali", "deepavali", "holi", "eid", "christmas", "new year", "festival", "holiday", "shubh")):
+    # 1. Cultural festival override
+    if any(k in title for k in ("diwali", "deepavali", "holi", "eid", "christmas", "new year", "festival", "holiday", "shubh")):
         selected_archetype = req.get("archetype") or "centered-badge"
         from app.services.poster.knowledge import get_cultural_rules
         fest = get_cultural_rules(title)
@@ -683,18 +635,42 @@ async def art_director_node(state: PosterState) -> Dict[str, Any]:
             }
         type_pairing = {"display": "Playfair Display", "text": "Inter"}
 
-    else:
-        # Default modern tech / authority
-        selected_archetype = req.get("archetype") or "hero-text"
-        accent = user_color if has_custom_color else "#6366F1"
+    # 2. Offer / Sale burst override
+    elif any(k in title for k in ("off", "sale", "discount", "deal", "clearance", "flash")):
+        selected_archetype = req.get("archetype") or "offer-burst"
+        accent = user_color if has_custom_color else "#EF4444"
         palette = {
-            "background": "#0B0F19",
-            "surface": "#1E293B",
-            "primary": "#F8FAFC",
-            "muted": "#94A3B8",
+            "background": "#0A0A0A",
+            "surface": "#1C0A0A",
+            "primary": "#FFFFFF",
+            "muted": "#CBD5E1",
             "accent": accent
         }
         type_pairing = {"display": "Playfair Display", "text": "Inter"}
+
+    # 3. Comprehensive 14-vertical taxonomy classification
+    else:
+        from app.services.creative_direction import resolve_vertical, build_creative_direction
+        vert = resolve_vertical(
+            industry_primary=req.get("category", ""),
+            industry_sub=req.get("theme", ""),
+            business_name=req.get("business_name", ""),
+            offerings_text=context_text
+        )
+        cd = build_creative_direction(
+            vertical_key=vert,
+            business_name=req.get("business_name", ""),
+            custom_primary_color=user_color if has_custom_color else None
+        )
+        selected_archetype = req.get("archetype") or (cd.ranked_archetypes[0] if cd.ranked_archetypes else "hero-text")
+        palette = {
+            "background": cd.palette.background,
+            "surface": cd.palette.surface,
+            "primary": cd.palette.text_primary,
+            "muted": cd.palette.text_muted,
+            "accent": user_color if has_custom_color else cd.palette.primary
+        }
+        type_pairing = {"display": cd.typography.display_font, "text": cd.typography.body_font}
 
     direction_data = {
         "concept": f"Canva-grade high-impact visual design for {brief.get('copy', {}).get('headline', '')}",
@@ -790,40 +766,41 @@ async def lint_node(state: PosterState) -> Dict[str, Any]:
 
 async def critic_node(state: PosterState) -> Dict[str, Any]:
     """Node 6: Critic - evaluates rubric across 10 dimensions and returns numeric fixes."""
-    lint = state.get("lint", {})
-    iteration = state.get("iteration", 0)
+    spec_dict = state.get("spec", {})
+    spec_obj = PosterSpec(**spec_dict)
+    brief = state.get("brief", {})
+    req = state.get("request", {})
+    platform = req.get("platform")
 
-    # Automated deterministic critic scoring based on linter and aesthetic rules
-    scores = {
-        "hierarchy": 9,
-        "legibility": 10 if lint.get("clean") else 6,
-        "alignment": 9 if not lint.get("warnings") else 7,
-        "spacing": 9,
-        "typography": 9,
-        "colour": 10,
-        "message": 9,
-        "platform_fit": 10,
-        "honesty": 10,
-        "polish": 9 if lint.get("clean") else 6
-    }
-    overall_score = round(sum(scores.values()) / 10.0, 1)
+    critique_report: VisionCritiqueReport = await evaluate_vision_critic(
+        spec=spec_obj,
+        brief=brief,
+        platform=platform
+    )
+
+    scores_dict = {k: v.score for k, v in critique_report.rubric.items()}
+    numeric_fixes = [adj.model_dump() for adj in critique_report.numeric_adjustments]
 
     critique = {
-        "scores": scores,
-        "overall": overall_score,
-        "blockers": lint.get("blockers", []),
-        "fixes": [],
-        "verdict": "pass" if overall_score >= 8.0 and lint.get("clean") else "revise"
+        "scores": scores_dict,
+        "overall": critique_report.overall_score,
+        "rubric": {k: v.model_dump() for k, v in critique_report.rubric.items()},
+        "strengths": critique_report.strengths,
+        "weaknesses": critique_report.weaknesses,
+        "fixes": numeric_fixes,
+        "verdict": critique_report.verdict,
+        "clean": critique_report.qa_report.clean if critique_report.qa_report else True
     }
 
     best_record = state.get("best") or {"score": -1}
-    if overall_score > best_record.get("score", -1):
+    if critique_report.overall_score > best_record.get("score", -1):
         best_record = {
-            "score": overall_score,
+            "score": critique_report.overall_score,
             "spec": state.get("spec"),
             "png_base64": state.get("png_base64"),
             "thumbnail_base64": state.get("thumbnail_base64"),
-            "svg_content": state.get("svg_content")
+            "svg_content": state.get("svg_content"),
+            "critique": critique
         }
 
     return {
@@ -831,7 +808,7 @@ async def critic_node(state: PosterState) -> Dict[str, Any]:
         "best": best_record,
         "events": state.get("events", []) + [{
             "stage": "critic",
-            "message": f"Critic score: {overall_score}/10 (Verdict: {critique['verdict']})"
+            "message": f"Vision Critic score: {critique_report.overall_score}/10 (Verdict: {critique['verdict']})"
         }]
     }
 
@@ -839,22 +816,31 @@ async def critic_node(state: PosterState) -> Dict[str, Any]:
 async def reviser_node(state: PosterState) -> Dict[str, Any]:
     """Node 7: Reviser - applies numeric fixes to the specification and increments loop."""
     spec_dict = state.get("spec", {})
-    lint = state.get("lint", {})
+    spec_obj = PosterSpec(**spec_dict)
+    critique = state.get("critique", {})
     iteration = state.get("iteration", 0) + 1
 
-    # Auto-adjust contrast or dimensions if linter reported blockers
-    for el in spec_dict.get("elements", []):
-        # Ensure 8px grid snapping
-        el["x"] = int(round(el.get("x", 0) / 8.0) * 8)
-        el["y"] = int(round(el.get("y", 0) / 8.0) * 8)
-        el["w"] = int(round(el.get("w", 0) / 8.0) * 8)
-        el["h"] = int(round(el.get("h", 0) / 8.0) * 8)
+    # Convert numeric adjustments from critique
+    raw_fixes = critique.get("fixes", [])
+    adjustments = [NumericAdjustment(**f) for f in raw_fixes]
+
+    # Apply targeted revisions
+    revised_spec = apply_numeric_revisions(spec_obj, adjustments)
+
+    # Strictly guarantee 8px grid snapping across all elements
+    for el in revised_spec.elements:
+        if el.id != "headline":
+            el.x = int(round(el.x / 8.0) * 8)
+        el.y = int(round(el.y / 8.0) * 8)
+        el.w = int(round(el.w / 8.0) * 8)
+        el.h = int(round(el.h / 8.0) * 8)
 
     return {
-        "spec": spec_dict,
+        "spec": revised_spec.model_dump(),
         "iteration": iteration,
-        "events": state.get("events", []) + [{"stage": "reviser", "message": f"Applied fixes for revision {iteration}"}]
+        "events": state.get("events", []) + [{"stage": "reviser", "message": f"Applied {len(adjustments)} numeric fixes for revision {iteration}"}]
     }
+
 
 
 async def export_node(state: PosterState) -> Dict[str, Any]:

@@ -128,22 +128,102 @@ def run_migrations(db_path: str):
           PRIMARY KEY (tenant_id, platform, idempotency_key)
         )""")
 
-        # Business profiles table (Dhanda AI Marketing profile, GMB details, local branding)
+        # Business profiles table (Multi-tenant business intake, brand kit, source facts & guardrails)
         con.execute("""CREATE TABLE IF NOT EXISTS business_profiles (
           tenant_id TEXT PRIMARY KEY,
           business_name TEXT NOT NULL,
-          category TEXT NOT NULL DEFAULT 'General Business',
+          legal_name TEXT DEFAULT '',
+          category TEXT NOT NULL DEFAULT '',
+          industry_primary TEXT NOT NULL DEFAULT '',
+          industry_sub TEXT DEFAULT '',
+          offerings_description TEXT DEFAULT '',
+          business_model TEXT NOT NULL DEFAULT 'physical_products',
           phone TEXT NOT NULL DEFAULT '',
           address TEXT NOT NULL DEFAULT '',
           website TEXT NOT NULL DEFAULT '',
           tagline TEXT NOT NULL DEFAULT '',
-          rating TEXT NOT NULL DEFAULT '4.9 ★★★★★',
-          review_count TEXT NOT NULL DEFAULT '120+ Google Reviews',
+          rating TEXT NOT NULL DEFAULT '',
+          review_count TEXT NOT NULL DEFAULT '',
           logo_url TEXT,
           primary_color TEXT NOT NULL DEFAULT '#6366f1',
+          secondary_color TEXT DEFAULT '#f59e0b',
+          accent_color TEXT DEFAULT '#10b981',
+          background_color TEXT DEFAULT '#0f172a',
+          display_font TEXT DEFAULT 'Inter',
+          body_font TEXT DEFAULT 'Inter',
+          positioning TEXT DEFAULT 'mid',
+          personality_json TEXT DEFAULT '{}',
+          audience_json TEXT DEFAULT '{}',
+          goals_json TEXT DEFAULT '[]',
+          competitors_json TEXT DEFAULT '[]',
+          source_facts_json TEXT DEFAULT '{}',
+          guardrails_json TEXT DEFAULT '{}',
+          region TEXT DEFAULT 'US',
+          timezone TEXT DEFAULT 'UTC',
+          onboarding_status TEXT NOT NULL DEFAULT 'pending',
+          approval_mode TEXT NOT NULL DEFAULT 'human',
           gmb_location_id TEXT,
+          creative_direction_json TEXT DEFAULT '{}',
           updated_at TEXT NOT NULL
         )""")
+
+        # Add missing columns to business_profiles dynamically
+        bp_cursor = con.execute("PRAGMA table_info(business_profiles)")
+        bp_cols = {row[1] for row in bp_cursor.fetchall()}
+        columns_to_ensure = [
+            ("legal_name", "TEXT DEFAULT ''"),
+            ("industry_primary", "TEXT NOT NULL DEFAULT ''"),
+            ("industry_sub", "TEXT DEFAULT ''"),
+            ("offerings_description", "TEXT DEFAULT ''"),
+            ("business_model", "TEXT NOT NULL DEFAULT 'physical_products'"),
+            ("secondary_color", "TEXT DEFAULT '#f59e0b'"),
+            ("accent_color", "TEXT DEFAULT '#10b981'"),
+            ("background_color", "TEXT DEFAULT '#0f172a'"),
+            ("display_font", "TEXT DEFAULT 'Inter'"),
+            ("body_font", "TEXT DEFAULT 'Inter'"),
+            ("positioning", "TEXT DEFAULT 'mid'"),
+            ("personality_json", "TEXT DEFAULT '{}'"),
+            ("audience_json", "TEXT DEFAULT '{}'"),
+            ("goals_json", "TEXT DEFAULT '[]'"),
+            ("competitors_json", "TEXT DEFAULT '[]'"),
+            ("source_facts_json", "TEXT DEFAULT '{}'"),
+            ("guardrails_json", "TEXT DEFAULT '{}'"),
+            ("region", "TEXT DEFAULT 'US'"),
+            ("timezone", "TEXT DEFAULT 'UTC'"),
+            ("onboarding_status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("approval_mode", "TEXT NOT NULL DEFAULT 'human'"),
+            ("creative_direction_json", "TEXT DEFAULT '{}'")
+        ]
+        for col_name, col_def in columns_to_ensure:
+            if col_name not in bp_cols:
+                con.execute(f"ALTER TABLE business_profiles ADD COLUMN {col_name} {col_def}")
+
+        # Offerings table (Products or Services per tenant)
+        con.execute("""CREATE TABLE IF NOT EXISTS offerings (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          price TEXT DEFAULT '',
+          is_bestseller INTEGER NOT NULL DEFAULT 0,
+          image_url TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (tenant_id) REFERENCES business_profiles(tenant_id) ON DELETE CASCADE
+        )""")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_offerings_tenant ON offerings(tenant_id)")
+
+        # Brand Assets table (Logos, Cutouts, Photos, Style references)
+        con.execute("""CREATE TABLE IF NOT EXISTS brand_assets (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          asset_type TEXT NOT NULL,
+          url TEXT NOT NULL,
+          meta_json TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (tenant_id) REFERENCES business_profiles(tenant_id) ON DELETE CASCADE
+        )""")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_brand_assets_tenant ON brand_assets(tenant_id)")
 
         # Scheduled festival & promotional posts queue
         con.execute("""CREATE TABLE IF NOT EXISTS scheduled_posts (

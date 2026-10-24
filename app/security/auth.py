@@ -233,26 +233,6 @@ async def verify_google_id_token(
         except Exception:
             pass
 
-    # Development / test bypass for mock tokens
-    if clean_token.startswith("simulated_google:") or clean_token.startswith("g_oauth_"):
-        try:
-            payload_str = clean_token.split(":", 1)[1] if ":" in clean_token else clean_token
-            try:
-                data = json.loads(base64.urlsafe_b64decode(payload_str.encode()).decode())
-            except Exception:
-                data = json.loads(payload_str)
-            email = data.get("email", "").lower().strip()
-            if not email or "@" not in email:
-                raise ValueError("Invalid email format")
-            return {
-                "email": email,
-                "name": data.get("name", email.split("@")[0]),
-                "sub": str(data.get("sub", f"google_sub_{abs(hash(email))}")),
-                "picture": data.get("picture", ""),
-                "email_verified": True
-            }
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid Google credential payload: {str(e)}")
 
     # 1. First attempt verification using google.oauth2 id_token library (Google JWKS)
     try:
@@ -326,32 +306,6 @@ async def verify_google_access_token(access_token: str) -> dict:
 
     clean_token = access_token.strip()
 
-    # Development / test bypass for mock tokens
-    if clean_token.startswith("simulated_google:") or clean_token.startswith("g_oauth_"):
-        try:
-            payload_str = clean_token.split(":", 1)[1] if ":" in clean_token else clean_token
-            try:
-                data = json.loads(base64.urlsafe_b64decode(payload_str.encode()).decode())
-            except Exception:
-                data = json.loads(payload_str)
-            email = data.get("email", "").lower().strip()
-            if not email or "@" not in email:
-                email = "test.google.user@example.com"
-            return {
-                "email": email,
-                "name": data.get("name", email.split("@")[0]),
-                "sub": str(data.get("sub", f"google_sub_{abs(hash(email))}")),
-                "picture": data.get("picture", ""),
-                "email_verified": True
-            }
-        except Exception:
-            return {
-                "email": "test.google.user@example.com",
-                "name": "Test Google User",
-                "sub": "mock_sub_access_token_123",
-                "picture": "",
-                "email_verified": True
-            }
 
     try:
         import httpx
@@ -442,6 +396,17 @@ def destroy_db_session(db_path: str, session_id: str) -> None:
     try:
         with sqlite3.connect(db_path) as con:
             con.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    except Exception:
+        pass
+
+def destroy_all_user_sessions(db_path: str, user_id: str) -> None:
+    """Invalidates and deletes all active sessions for a user across all devices."""
+    import sqlite3
+    if not user_id:
+        return
+    try:
+        with sqlite3.connect(db_path) as con:
+            con.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     except Exception:
         pass
 

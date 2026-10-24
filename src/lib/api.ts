@@ -39,6 +39,25 @@ export function removeAuthToken() {
   }
 }
 
+// Cross-tab authentication synchronization
+export const authChannel = typeof window !== "undefined" && "BroadcastChannel" in window 
+  ? new BroadcastChannel("auth") 
+  : null;
+
+if (authChannel) {
+  authChannel.onmessage = (event) => {
+    if (event.data === "logout") {
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.href = `/login?return_to=${encodeURIComponent(window.location.pathname)}`;
+      }
+    } else if (event.data === "login") {
+      if (typeof window !== "undefined" && window.location.pathname === "/login") {
+        window.location.href = "/studio";
+      }
+    }
+  };
+}
+
 export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
@@ -50,12 +69,31 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  // Rewrite /api and /auth through local origin when possible or use API_BASE
+  const url = endpoint.startsWith("http") 
+    ? endpoint 
+    : endpoint.startsWith("/") 
+      ? endpoint 
+      : `/${endpoint}`;
 
   const res = await fetch(url, {
     ...options,
     headers,
+    credentials: "include", // Ensure session cookies are sent with every request
   });
+
+  if (res.status === 401) {
+    // If unauthorized, notify other tabs and redirect to login
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      removeAuthToken();
+      if (authChannel) {
+        authChannel.postMessage("logout");
+      }
+      const safeReturnTo = window.location.pathname.startsWith("/") ? window.location.pathname : "/studio";
+      window.location.href = `/login?return_to=${encodeURIComponent(safeReturnTo)}`;
+    }
+    throw new Error("Authentication required. Please sign in.");
+  }
 
   if (!res.ok) {
     let errorDetail = `Request failed with status ${res.status}`;
@@ -70,126 +108,43 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
 }
 
 // ---------------------------------------------------------------------------
-// Authentication & MFA Service
+// Authentication & Session Service
 // ---------------------------------------------------------------------------
 export const authService = {
-  async getDevToken() {
-    const data = await fetchApi("/api/auth/token");
-    setAuthToken(data.token);
-    return data;
-  },
-
-  async login(email: string, password: string) {
-    return fetchApi("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-  },
-
-  async register(data: {
-    email: string;
-    password: string;
-    business_name: string;
-    full_name?: string;
-    enable_mfa?: boolean;
-  }) {
-    return fetchApi("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  async verifyMfa(challenge_token: string, otp_code: string) {
-    return fetchApi("/api/auth/mfa/verify", {
-      method: "POST",
-      body: JSON.stringify({ challenge_token, otp_code }),
-    });
-  },
-
-  async sendOtp(challenge_token: string) {
-    return fetchApi("/api/auth/otp/send", {
-      method: "POST",
-      body: JSON.stringify({ challenge_token }),
-    });
-  },
-
   async getProfile() {
-    return fetchApi("/api/auth/me");
+    return fetchApi("/auth/me");
   },
 
-  async getMfaSetup() {
-    return fetchApi("/api/auth/mfa/setup", { method: "POST" });
-  },
-
-  async activateMfa(secret: string, code: string) {
-    return fetchApi("/api/auth/mfa/activate", {
-      method: "POST",
-      body: JSON.stringify({ secret, code }),
-    });
-  },
-
-  async verifyGoogleCredential(credential: string) {
-    const res = await fetchApi("/api/auth/google", {
-      method: "POST",
-      body: JSON.stringify({ credential }),
-    });
-    if (res.access_token) {
-      setAuthToken(res.access_token);
-      if (res.user) {
-        localStorage.setItem("agent_team_user", JSON.stringify(res.user));
-      }
-    }
-    return res;
-  },
-
-  async handleAppwriteCallback() {
-    if (!appwriteAccount) return null;
+  async logout() {
     try {
-      const apwUser = await appwriteAccount.get();
-      const res = await fetchApi("/api/auth/appwrite", {
-        method: "POST",
-        body: JSON.stringify({
-          appwrite_user_id: apwUser.$id,
-          email: apwUser.email,
-          name: apwUser.name,
-          email_verified: apwUser.emailVerification,
-        }),
-      });
-      if (res.access_token) {
-        setAuthToken(res.access_token);
-        if (res.user) {
-          localStorage.setItem("agent_team_user", JSON.stringify(res.user));
-        }
-        return res.user;
-      }
-    } catch (err) {
-      console.warn("Appwrite Google exchange error:", err);
+      await fetchApi("/auth/logout", { method: "POST" });
+    } catch (_) {}
+    removeAuthToken();
+    if (authChannel) {
+      authChannel.postMessage("logout");
     }
-    return null;
-  },
-
-  async verifyGoogleAccessToken(accessToken: string) {
-    return fetchApi("/api/auth/google", {
-      method: "POST",
-      body: JSON.stringify({ access_token: accessToken }),
-    });
-  },
-
-  async quickAccess() {
-    const res = await fetchApi("/api/auth/quick-access", { method: "POST" });
-    if (res.access_token) {
-      setAuthToken(res.access_token);
-      if (res.user) {
-        localStorage.setItem("agent_team_user", JSON.stringify(res.user));
-      }
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
     }
-    return res;
   },
 
-  initiateGoogleLogin() {
+  async logoutAll() {
+    try {
+      await fetchApi("/auth/logout-all", { method: "POST" });
+    } catch (_) {}
+    removeAuthToken();
+    if (authChannel) {
+      authChannel.postMessage("logout");
+    }
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+  },
+
+  initiateGoogleLogin(returnTo: string = "/studio") {
     if (typeof window === "undefined") return;
-    const origin = encodeURIComponent(window.location.origin);
-    window.location.href = `${API_BASE}/auth/google/login?redirect_origin=${origin}`;
+    const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/studio";
+    window.location.href = `/auth/google/login?return_to=${encodeURIComponent(safeReturnTo)}`;
   },
 };
 
@@ -252,6 +207,23 @@ export const campaignService = {
 
   async getPosterArchetypes() {
     return fetchApi("/api/poster/archetypes");
+  },
+
+  async getPosterTemplates() {
+    return fetchApi("/api/poster/templates");
+  },
+
+  async getTemplateCandidates(params: {
+    vertical?: string;
+    industry_category?: string;
+    goal?: string;
+    has_client_photos?: boolean;
+    recent_archetypes?: string[];
+  }) {
+    return fetchApi("/api/poster/candidates", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
   },
 
   async lintPosterSpec(spec: any) {

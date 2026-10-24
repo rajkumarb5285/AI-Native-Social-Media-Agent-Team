@@ -39,4 +39,31 @@ __all__ = [
     "log_poster_generation",
     "record_human_feedback",
     "export_training_dataset",
+    # Phase 4 (Production): Template System & Selector
+    "TEMPLATES_CATALOG",
+    "ARCHETYPES_CATALOG",
+    "template_selector",
+    "TemplateSelector",
+    "TemplateCandidate",
+    "CandidateSelectionRequest",
+    # Phase 5: QA Suite & Vision Critic
+    "run_full_poster_qa",
+    "generate_poster_html",
+    "inspect_poster_dom_playwright",
+    "QASuiteReport",
+    "QACheckResult",
+    "NumericAdjustment",
+    "evaluate_vision_critic",
+    "apply_numeric_revisions",
+    "VisionCritiqueReport",
 ]
+
+from .templates_catalog import TEMPLATES_CATALOG, ARCHETYPES_CATALOG
+from .template_selector import template_selector, TemplateSelector, TemplateCandidate, CandidateSelectionRequest
+from .qa_suite import (
+    run_full_poster_qa, generate_poster_html, inspect_poster_dom_playwright,
+    QASuiteReport, QACheckResult, NumericAdjustment
+)
+from .vision_critic import evaluate_vision_critic, apply_numeric_revisions, VisionCritiqueReport
+
+

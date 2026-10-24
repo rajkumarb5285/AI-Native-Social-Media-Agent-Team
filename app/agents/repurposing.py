@@ -183,7 +183,7 @@ class RepurposingAgent(BaseAgent[RepurposingInput, RepurposingOutput]):
                 from app.services.poster.renderer import render_poster_spec
                 
                 # Infer Canva archetype from platform or headline
-                arch = "quote-card" if key == "gmb" else ("split-image-text" if any(k in input_data.headline.lower() for k in ("coffee", "food", "dining", "product")) else "hero-text")
+                arch = "quote-card" if key == "gmb" else ("split-image-text" if any(k in input_data.headline.lower() for k in ("coffee", "food", "dining", "product", "sneaker", "shoes", "fashion", "collection", "apparel")) else "hero-text")
                 spec = get_archetype_template(
                     archetype=arch,
                     headline=input_data.headline,

@@ -189,19 +189,15 @@ def test_auth_register_and_login(client):
     assert bad_login.status_code == 401
 
 
-def test_auth_google_and_quick_access(client):
-    google_resp = client.post("/api/auth/google", json={
-        "email": "sarah.director@agency.io",
-        "name": "Sarah Connor"
-    })
-    assert google_resp.status_code == 200
-    assert "access_token" in google_resp.json()
-    assert google_resp.json()["user"]["email"] == "sarah.director@agency.io"
+def test_auth_quick_access_backdoor_is_purged_and_protected_routes_require_auth():
+    unauthed = TestClient(app)
+    # Backdoor endpoint must be removed and return 404
+    quick_resp = unauthed.post("/api/auth/quick-access")
+    assert quick_resp.status_code == 404
 
-    quick_resp = client.post("/api/auth/quick-access")
-    assert quick_resp.status_code == 200
-    assert "access_token" in quick_resp.json()
-    assert quick_resp.json()["user"]["email"] == "operator@dhanda.ai"
+    # Unauthenticated access to protected route must return 401
+    runs_resp = unauthed.get("/api/runs")
+    assert runs_resp.status_code == 401
 
 
 def test_business_profile_crud(client):
@@ -233,6 +229,29 @@ def test_business_profile_crud(client):
     assert reget.status_code == 200
     assert reget.json()["business_name"] == "Royal Jewellers & Co"
     assert reget.json()["phone"] == "+91 99887 76655"
+
+
+def test_offerings_crud(client):
+    # Add offering
+    off_resp = client.post("/api/offerings", json={
+        "name": "Diamond Solitaire Ring",
+        "description": "1.5ct certified lab-grown diamond",
+        "price": "$1,499",
+        "is_bestseller": True
+    })
+    assert off_resp.status_code == 200
+    off_id = off_resp.json()["id"]
+
+    # List offerings
+    list_resp = client.get("/api/offerings")
+    assert list_resp.status_code == 200
+    offerings = list_resp.json()["offerings"]
+    assert len(offerings) >= 1
+    assert offerings[-1]["name"] == "Diamond Solitaire Ring"
+
+    # Delete offering
+    del_resp = client.delete(f"/api/offerings/{off_id}")
+    assert del_resp.status_code == 200
 
 
 def test_festivals_upcoming_and_generate(client):

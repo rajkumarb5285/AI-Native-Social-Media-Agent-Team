@@ -1,10 +1,10 @@
 import os, json, sqlite3, uuid, datetime, asyncio, secrets, urllib.parse
 from pathlib import Path
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,9 @@ AGENTS = [
 from contextlib import asynccontextmanager
 from app.services.llm.json_utils import clean_and_parse_json
 from app.agents.graph import AgentGraph
+from app.agents.business_understanding import analyze_business_profile, BusinessUnderstandingAgent
+from app.services.creative_direction import resolve_vertical, build_creative_direction
+from app.services.poster.contamination_guard import check_copy_contamination, clean_copy_of_contamination
 
 agent_graph = AgentGraph()
 
@@ -98,19 +101,54 @@ class GoogleOAuthConfigRequest(BaseModel):
 
 class BusinessProfileModel(BaseModel):
     business_name: str = Field(min_length=1, max_length=120)
-    category: str = Field(default="General Business", max_length=120)
+    legal_name: Optional[str] = Field(default="", max_length=150)
+    category: str = Field(default="", max_length=120)
+    industry_primary: str = Field(default="", max_length=80)
+    industry_sub: Optional[str] = Field(default="", max_length=100)
+    offerings_description: Optional[str] = Field(default="", max_length=1000)
+    business_model: str = Field(default="physical_products", max_length=50)
     phone: str = Field(default="", max_length=60)
     address: str = Field(default="", max_length=255)
     website: str = Field(default="", max_length=255)
     tagline: str = Field(default="", max_length=255)
-    rating: str = Field(default="4.9 ★★★★★", max_length=50)
-    review_count: str = Field(default="120+ Google Reviews", max_length=50)
+    rating: str = Field(default="", max_length=50)
+    review_count: str = Field(default="", max_length=50)
     logo_url: Optional[str] = None
     primary_color: str = Field(default="#6366f1", max_length=30)
+    secondary_color: Optional[str] = Field(default="#f59e0b", max_length=30)
+    accent_color: Optional[str] = Field(default="#10b981", max_length=30)
+    background_color: Optional[str] = Field(default="#0f172a", max_length=30)
+    display_font: Optional[str] = Field(default="Inter", max_length=50)
+    body_font: Optional[str] = Field(default="Inter", max_length=50)
+    positioning: Optional[str] = Field(default="mid", max_length=30)
+    personality_json: Optional[Union[dict, str]] = Field(default_factory=dict)
+    audience_json: Optional[Union[dict, str]] = Field(default_factory=dict)
+    goals_json: Optional[Union[list, str]] = Field(default_factory=list)
+    competitors_json: Optional[Union[list, str]] = Field(default_factory=list)
+    source_facts_json: Optional[Union[dict, str]] = Field(default_factory=dict)
+    guardrails_json: Optional[Union[dict, str]] = Field(default_factory=dict)
+    creative_direction_json: Optional[Union[dict, str]] = Field(default_factory=dict)
+    region: Optional[str] = Field(default="US", max_length=50)
+    timezone: Optional[str] = Field(default="UTC", max_length=50)
+    onboarding_status: str = Field(default="complete", max_length=30)
+    approval_mode: str = Field(default="human", max_length=30)
     gmb_location_id: Optional[str] = None
+
+class OfferingModel(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: Optional[str] = Field(default="", max_length=500)
+    price: Optional[str] = Field(default="", max_length=50)
+    is_bestseller: bool = False
+    image_url: Optional[str] = None
 
 class FestivalGenerateRequest(BaseModel):
     festival_id: str
+    custom_offer: Optional[str] = None
+    platforms: list[str] = Field(default_factory=lambda: ["Instagram", "GMB", "LinkedIn"])
+    auto_publish: bool = False
+
+class OccasionGenerateRequest(BaseModel):
+    occasion_id: str
     custom_offer: Optional[str] = None
     platforms: list[str] = Field(default_factory=lambda: ["Instagram", "GMB", "LinkedIn"])
     auto_publish: bool = False
@@ -146,7 +184,7 @@ from app.security.auth import (
     generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp_code,
     generate_numeric_otp, verify_google_id_token, verify_google_access_token, generate_pkce_pair, generate_oauth_state,
     generate_nonce, is_safe_redirect_url, create_db_session, get_session_user, destroy_db_session,
-    rotate_db_session, SESSION_COOKIE_NAME
+    destroy_all_user_sessions, rotate_db_session, SESSION_COOKIE_NAME
 )
 from app.security.audit import AuditLogger
 from app.security.rbac import Role
@@ -159,8 +197,20 @@ from app.integrations.crypto import encrypt_token, decrypt_token
 from app.services.festival_calendar import festival_engine
 from app.services.poster_generator import generate_social_poster, TEMPLATES
 from app.services.poster import (
-    PosterSpec, lint_poster_spec, render_poster_spec, get_archetype_template, ARCHETYPE_SPECS
+    PosterSpec, lint_poster_spec, render_poster_spec, get_archetype_template, ARCHETYPE_SPECS,
+    TEMPLATES_CATALOG, ARCHETYPES_CATALOG, template_selector, CandidateSelectionRequest,
+    run_full_poster_qa, generate_poster_html, evaluate_vision_critic
 )
+from app.services.print import (
+    PRINT_FORMATS, PrintCollateralSpec, PrintDimensions,
+    generate_print_qr_base64, generate_print_qr_bytes,
+    render_print_collateral, PrintRenderResult
+)
+from app.agents.print_designer import print_designer, PrintGenerationRequest
+from app.services.occasions import occasions_service, OccasionRecord
+from app.services.analytics import analytics_service
+
+
 
 audit_logger = AuditLogger(lambda: DB_PATH)
 
@@ -302,20 +352,64 @@ def health():
     return {"status":"ok","mode":"demo" if DEMO_MODE else "llm-enabled","model":MODEL if API_KEY else None,"time":now(),
             "integrations":{"social_publishing":False,"live_market_research":False,"live_analytics":False}}
 
+@app.get("/api/ready")
+@app.get("/ready")
+def readiness_check():
+    """Production readiness probe validating database, encryption, and queue storage health."""
+    checks = {}
+    is_ready = True
+
+    # 1. Database check
+    try:
+        with db() as con:
+            row = con.execute("SELECT 1 as ping").fetchone()
+            if row and row["ping"] == 1:
+                checks["database"] = "ok"
+            else:
+                checks["database"] = "error"
+                is_ready = False
+    except Exception as e:
+        checks["database"] = f"error: {str(e)}"
+        is_ready = False
+
+    # 2. Token encryption check
+    try:
+        test_payload = "health_probe_token"
+        enc = encrypt_token(test_payload)
+        dec = decrypt_token(enc)
+        if dec == test_payload:
+            checks["encryption"] = "ok"
+        else:
+            checks["encryption"] = "error"
+            is_ready = False
+    except Exception as e:
+        checks["encryption"] = f"error: {str(e)}"
+        is_ready = False
+
+    # 3. File storage check
+    try:
+        probe_file = Path(DB_PATH).parent / ".storage_probe"
+        probe_file.write_text("probe", encoding="utf-8")
+        probe_file.unlink(missing_ok=True)
+        checks["storage"] = "ok"
+    except Exception as e:
+        checks["storage"] = f"error: {str(e)}"
+        is_ready = False
+
+    status_code = 200 if is_ready else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if is_ready else "unhealthy",
+            "version": "1.0.0",
+            "checks": checks,
+            "timestamp": now()
+        }
+    )
+
 @app.get("/api/agents")
 def agents():
     return {"agents":AGENTS,"note":"Ten implemented specialist workflow roles."}
-
-@app.get("/api/auth/token")
-def issue_dashboard_token():
-    user = AuthenticatedUser(
-        user_id="usr_dashboard_admin",
-        email="admin@workspace.local",
-        role=Role.ADMIN.value,
-        tenant_id="default"
-    )
-    token = create_jwt(user)
-    return {"token": token, "user": user.model_dump()}
 
 @app.get("/api/runs")
 def list_runs(user: AuthenticatedUser = Depends(get_current_user)):
@@ -1322,11 +1416,6 @@ async def google_oauth_callback(
                        VALUES (?, ?, ?, ?, ?, 'editor', ?, 1, ?, ?, ?, ?, ?, 1, 1, ?)""",
                     (user_id, now(), now(), email, pwd_hash, tenant_id, google_sub, google_sub, name, name, picture, now())
                 )
-                # Create personal workspace
-                con.execute("""
-                    INSERT OR IGNORE INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, updated_at)
-                    VALUES (?, ?, 'Verified Google Account', '', '', '', 'Empowering Business with Smart AI Marketing', '5.0 ★★★★★', '100+ Google Reviews', ?)
-                """, (tenant_id, f"{name}'s Business", now()))
                 user_dict = {
                     "id": user_id, "email": email, "role": "editor", "tenant_id": tenant_id,
                     "mfa_enabled": 0, "name": name, "avatar_url": picture
@@ -1358,22 +1447,18 @@ async def google_oauth_callback(
     audit_logger.log(user_dict["tenant_id"], user_dict["id"], "auth.google.login_success", user_dict["id"], {"email": email, "auth_method": "google_oidc_pkce"})
 
     is_secure = os.getenv("ENVIRONMENT", "development").lower() not in ("development", "test")
-    response = RedirectResponse(url=f"{target_origin}/?auth_success=true&token={urllib.parse.quote(jwt_token)}", status_code=303)
+    # Redirect cleanly to target_origin with success indicator (no tokens in URL)
+    clean_target = target_origin if target_origin and target_origin.startswith("/") else "/"
+    sep = "&" if "?" in clean_target else "?"
+    response = RedirectResponse(url=f"{clean_target}{sep}auth_success=true", status_code=303)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
         httponly=True,
         samesite="lax",
         secure=is_secure,
-        max_age=86400 * 7
-    )
-    response.set_cookie(
-        key="agent_team_token",
-        value=jwt_token,
-        httponly=False,
-        samesite="lax",
-        secure=is_secure,
-        max_age=86400 * 7
+        max_age=86400 * 7,
+        path="/"
     )
     return response
 
@@ -1420,10 +1505,6 @@ def auth_appwrite(req: AuthAppwriteRequest, request: Request):
                        VALUES (?, ?, ?, ?, ?, 'editor', ?, 1, ?, ?, ?, ?, 1, 1, ?)""",
                     (user_id, now(), now(), email, pwd_hash, tenant_id, google_sub, google_sub, name, name, now())
                 )
-                con.execute("""
-                    INSERT OR IGNORE INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, updated_at)
-                    VALUES (?, ?, 'Verified Google Account (Appwrite)', '', '', '', 'Empowering Business with Smart AI Marketing', '5.0 ★★★★★', '100+ Google Reviews', ?)
-                """, (tenant_id, f"{name}'s Business", now()))
                 user_dict = {
                     "id": user_id, "email": email, "role": "editor", "tenant_id": tenant_id,
                     "mfa_enabled": 0, "name": name
@@ -1485,28 +1566,6 @@ def auth_appwrite(req: AuthAppwriteRequest, request: Request):
     )
     return response
 
-@app.post("/api/auth/quick-access")
-def quick_access_auth():
-    """Testing & internal automation endpoint."""
-    email = "operator@dhanda.ai"
-    with db() as con:
-        user_row = con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        if not user_row:
-            user_id = f"usr_quick_{uuid.uuid4().hex[:8]}"
-            pwd_hash = hash_password("dhanda-ai-secure-access-2026")
-            con.execute(
-                "INSERT INTO users (id, created_at, updated_at, email, password_hash, role, tenant_id, is_active, is_verified) VALUES (?, ?, ?, ?, ?, 'admin', 'default', 1, 1)",
-                (user_id, now(), now(), email, pwd_hash)
-            )
-            auth_user = AuthenticatedUser(user_id=user_id, email=email, role="admin", tenant_id="default")
-        else:
-            auth_user = AuthenticatedUser(user_id=user_row["id"], email=user_row["email"], role=user_row["role"], tenant_id=user_row["tenant_id"])
-    token = create_jwt(auth_user)
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {"id": auth_user.user_id, "email": auth_user.email, "role": auth_user.role, "tenant_id": auth_user.tenant_id}
-    }
 
 @app.get("/auth/me")
 @app.get("/api/auth/me")
@@ -1545,8 +1604,18 @@ def logout(request: Request):
     if session_id:
         destroy_db_session(DB_PATH, session_id)
     response = JSONResponse(content={"status": "ok", "message": "Signed out successfully."})
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    response.delete_cookie("agent_team_token")
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie("agent_team_token", path="/")
+    return response
+
+@app.post("/auth/logout-all")
+@app.post("/api/auth/logout-all")
+def logout_all_devices(request: Request, user: AuthenticatedUser = Depends(get_current_user)):
+    """Destroys all active sessions across all devices for this user."""
+    destroy_all_user_sessions(DB_PATH, user.user_id)
+    response = JSONResponse(content={"status": "ok", "message": "Signed out from all devices successfully."})
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie("agent_team_token", path="/")
     return response
 
 @app.delete("/auth/me")
@@ -1609,33 +1678,60 @@ def get_business_profile(user: AuthenticatedUser = Depends(get_current_user)):
     with db() as con:
         row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
         if row:
-            return dict(row)
+            d = dict(row)
+            for f in ("personality_json", "audience_json", "goals_json", "competitors_json", "source_facts_json", "guardrails_json", "creative_direction_json"):
+                if isinstance(d.get(f), str) and d[f]:
+                    try:
+                        d[f] = json.loads(d[f])
+                    except Exception:
+                        pass
+            d["exists"] = True
+            return d
     return {
+        "exists": False,
         "tenant_id": user.tenant_id,
-        "business_name": "Apex Innovations",
-        "category": "Digital Growth & Retail",
-        "phone": "+91 98765 43210",
-        "address": "Brigade Metropolis, Tech Zone, Bangalore",
-        "website": "https://apexinnovations.in",
-        "tagline": "Empowering Local Businesses with Smart AI Marketing",
-        "rating": "4.9 ★★★★★",
-        "review_count": "148+ Google Reviews",
-        "logo_url": None,
-        "primary_color": "#6366f1",
-        "gmb_location_id": "locations/189283749",
-        "updated_at": now()
+        "onboarding_status": "pending",
+        "business_name": "",
+        "rating": "",
+        "phone": "",
+        "industry_primary": ""
     }
 
 @app.post("/api/profile")
 @app.post("/api/business-profile")
 def save_business_profile(profile: BusinessProfileModel, user: AuthenticatedUser = Depends(get_current_user)):
+    personality = json.dumps(profile.personality_json) if isinstance(profile.personality_json, (dict, list)) else (profile.personality_json or "{}")
+    audience = json.dumps(profile.audience_json) if isinstance(profile.audience_json, (dict, list)) else (profile.audience_json or "{}")
+    goals = json.dumps(profile.goals_json) if isinstance(profile.goals_json, list) else (profile.goals_json or "[]")
+    competitors = json.dumps(profile.competitors_json) if isinstance(profile.competitors_json, list) else (profile.competitors_json or "[]")
+    source_facts = json.dumps(profile.source_facts_json) if isinstance(profile.source_facts_json, dict) else (profile.source_facts_json or "{}")
+    guardrails = json.dumps(profile.guardrails_json) if isinstance(profile.guardrails_json, dict) else (profile.guardrails_json or "{}")
+
     with db() as con:
+        # Load any existing offerings for more context
+        offering_rows = con.execute("SELECT * FROM offerings WHERE tenant_id=?", (user.tenant_id,)).fetchall()
+        offerings_list = [dict(r) for r in offering_rows]
+        cd = analyze_business_profile(profile.model_dump(), offerings_list)
+        creative_dir_json = json.dumps(cd.model_dump())
+
         con.execute("""
-            INSERT INTO business_profiles (tenant_id, business_name, category, phone, address, website, tagline, rating, review_count, logo_url, primary_color, gmb_location_id, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO business_profiles (
+              tenant_id, business_name, legal_name, category, industry_primary, industry_sub,
+              offerings_description, business_model, phone, address, website, tagline, rating,
+              review_count, logo_url, primary_color, secondary_color, accent_color, background_color,
+              display_font, body_font, positioning, personality_json, audience_json, goals_json,
+              competitors_json, source_facts_json, guardrails_json, region, timezone,
+              onboarding_status, approval_mode, gmb_location_id, creative_direction_json, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tenant_id) DO UPDATE SET
               business_name=excluded.business_name,
+              legal_name=excluded.legal_name,
               category=excluded.category,
+              industry_primary=excluded.industry_primary,
+              industry_sub=excluded.industry_sub,
+              offerings_description=excluded.offerings_description,
+              business_model=excluded.business_model,
               phone=excluded.phone,
               address=excluded.address,
               website=excluded.website,
@@ -1644,15 +1740,103 @@ def save_business_profile(profile: BusinessProfileModel, user: AuthenticatedUser
               review_count=excluded.review_count,
               logo_url=excluded.logo_url,
               primary_color=excluded.primary_color,
+              secondary_color=excluded.secondary_color,
+              accent_color=excluded.accent_color,
+              background_color=excluded.background_color,
+              display_font=excluded.display_font,
+              body_font=excluded.body_font,
+              positioning=excluded.positioning,
+              personality_json=excluded.personality_json,
+              audience_json=excluded.audience_json,
+              goals_json=excluded.goals_json,
+              competitors_json=excluded.competitors_json,
+              source_facts_json=excluded.source_facts_json,
+              guardrails_json=excluded.guardrails_json,
+              region=excluded.region,
+              timezone=excluded.timezone,
+              onboarding_status=excluded.onboarding_status,
+              approval_mode=excluded.approval_mode,
               gmb_location_id=excluded.gmb_location_id,
+              creative_direction_json=excluded.creative_direction_json,
               updated_at=excluded.updated_at
         """, (
-            user.tenant_id, profile.business_name, profile.category, profile.phone,
-            profile.address, profile.website, profile.tagline, profile.rating,
-            profile.review_count, profile.logo_url, profile.primary_color,
-            profile.gmb_location_id, now()
+            user.tenant_id, profile.business_name, profile.legal_name or "", profile.category,
+            profile.industry_primary, profile.industry_sub or "", profile.offerings_description or "",
+            profile.business_model, profile.phone, profile.address, profile.website, profile.tagline,
+            profile.rating, profile.review_count, profile.logo_url, profile.primary_color,
+            profile.secondary_color or "#f59e0b", profile.accent_color or "#10b981", profile.background_color or "#0f172a",
+            profile.display_font or "Inter", profile.body_font or "Inter", profile.positioning or "mid",
+            personality, audience, goals, competitors, source_facts, guardrails,
+            profile.region or "US", profile.timezone or "UTC", profile.onboarding_status,
+            profile.approval_mode, profile.gmb_location_id, creative_dir_json, now()
         ))
-    return {"status": "success", "profile": profile.model_dump(), "updated_at": now()}
+        con.execute("UPDATE users SET business_name = ? WHERE id = ?", (profile.business_name, user.user_id))
+
+    resp_profile = profile.model_dump()
+    resp_profile["creative_direction"] = cd.model_dump()
+    return {"status": "success", "profile": resp_profile, "updated_at": now()}
+
+@app.get("/api/creative-direction")
+def get_creative_direction_endpoint(user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Business profile not found. Please complete onboarding.")
+        d = dict(row)
+        cd_raw = d.get("creative_direction_json")
+        if cd_raw and cd_raw != "{}":
+            try:
+                return json.loads(cd_raw)
+            except Exception:
+                pass
+        
+        # Auto-synthesize if not cached
+        offering_rows = con.execute("SELECT * FROM offerings WHERE tenant_id=?", (user.tenant_id,)).fetchall()
+        offerings = [dict(r) for r in offering_rows]
+        cd = analyze_business_profile(d, offerings)
+        cd_json = json.dumps(cd.model_dump())
+        con.execute("UPDATE business_profiles SET creative_direction_json=? WHERE tenant_id=?", (cd_json, user.tenant_id))
+        return cd.model_dump()
+
+@app.post("/api/creative-direction/regenerate")
+def regenerate_creative_direction_endpoint(user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Business profile not found.")
+        d = dict(row)
+        offering_rows = con.execute("SELECT * FROM offerings WHERE tenant_id=?", (user.tenant_id,)).fetchall()
+        offerings = [dict(r) for r in offering_rows]
+        cd = analyze_business_profile(d, offerings)
+        cd_json = json.dumps(cd.model_dump())
+        con.execute("UPDATE business_profiles SET creative_direction_json=? WHERE tenant_id=?", (cd_json, user.tenant_id))
+        return {"status": "success", "creative_direction": cd.model_dump()}
+
+@app.get("/api/offerings")
+def list_offerings(user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        rows = con.execute("SELECT * FROM offerings WHERE tenant_id=? ORDER BY created_at ASC", (user.tenant_id,)).fetchall()
+        return {"offerings": [dict(r) for r in rows]}
+
+@app.post("/api/offerings")
+def add_offering(offering: OfferingModel, user: AuthenticatedUser = Depends(get_current_user)):
+    offering_id = f"off_{uuid.uuid4().hex[:10]}"
+    with db() as con:
+        con.execute("""
+            INSERT INTO offerings (id, tenant_id, name, description, price, is_bestseller, image_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            offering_id, user.tenant_id, offering.name, offering.description or "",
+            offering.price or "", 1 if offering.is_bestseller else 0, offering.image_url,
+            now(), now()
+        ))
+    return {"status": "success", "id": offering_id, "offering": offering.model_dump()}
+
+@app.delete("/api/offerings/{offering_id}")
+def delete_offering(offering_id: str, user: AuthenticatedUser = Depends(get_current_user)):
+    with db() as con:
+        con.execute("DELETE FROM offerings WHERE id=? AND tenant_id=?", (offering_id, user.tenant_id))
+    return {"status": "success", "message": "Offering deleted."}
 
 # ---------------------------------------------------------------------------
 # Autonomous Festival Calendar & 1000s Design Template Catalog
@@ -1710,24 +1894,160 @@ async def generate_festival_campaign(req: FestivalGenerateRequest, user: Authent
         "published_results": published_results
     }
 
+
+# ---------------------------------------------------------------------------
+# Phase 7: Real-Time Occasions, Channel Health & Analytics Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/occasions/upcoming")
+def get_upcoming_occasions_endpoint(
+    days_ahead: int = 90,
+    region: Optional[str] = None,
+    vertical: Optional[str] = None,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)
+):
+    detected_region = region
+    detected_vert = vertical
+    if user:
+        with db() as con:
+            row = con.execute("SELECT region, industry_primary, industry_sub, business_name FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
+            if row:
+                if not detected_region and row["region"]:
+                    c_up = str(row["region"]).strip().upper()
+                    if c_up in ("INDIA", "IN", "BHARAT"):
+                        detected_region = "IN"
+                    elif c_up in ("USA", "UNITED STATES", "US"):
+                        detected_region = "US"
+                    elif c_up in ("UK", "UNITED KINGDOM", "GB"):
+                        detected_region = "UK"
+                if not detected_vert and (row["industry_primary"] or row["industry_sub"]):
+                    detected_vert = resolve_vertical(
+                        industry_primary=row["industry_primary"] or "",
+                        industry_sub=row["industry_sub"] or "",
+                        business_name=row["business_name"] or ""
+                    )
+
+    occasions = occasions_service.get_upcoming_occasions(
+        days_ahead=days_ahead,
+        region=detected_region,
+        vertical=detected_vert
+    )
+    return {
+        "occasions": [o.model_dump() for o in occasions],
+        "count": len(occasions),
+        "region_applied": detected_region or "GLOBAL",
+        "vertical_applied": detected_vert or "all"
+    }
+
+
+@app.post("/api/occasions/generate")
+async def generate_occasion_campaign_endpoint(
+    req: OccasionGenerateRequest,
+    user: AuthenticatedUser = Depends(get_current_user)
+):
+    with db() as con:
+        prof_row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
+    if not prof_row:
+        raise HTTPException(status_code=400, detail="A registered business profile is strictly required. Please complete onboarding first.")
+
+    profile_dict = dict(prof_row)
+    try:
+        campaign = occasions_service.generate_occasion_campaign(
+            tenant_id=user.tenant_id,
+            occasion_id=req.occasion_id,
+            business_profile=profile_dict,
+            custom_offer=req.custom_offer
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    published_results = []
+    if req.auto_publish:
+        connections = platform_manager.list_connections(user.tenant_id)
+        for platform in req.platforms:
+            plat_lower = platform.lower()
+            matching = next((c for c in connections if c.platform.lower() == plat_lower or (plat_lower in ("gmb", "google_business") and c.platform.lower() in ("gmb", "google_business")) or (plat_lower == "x" and c.platform.lower() == "twitter")), None)
+            if matching:
+                pub_res = await platform_manager.publish(
+                    platform=plat_lower,
+                    connection_id=matching.connection_id,
+                    copy=campaign["copy"] + "\n\n" + " ".join(campaign["hashtags"]),
+                    media_urls=[],
+                    idempotency_key=f"occ_{req.occasion_id}_{plat_lower}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=user.tenant_id
+                )
+                published_results.append({
+                    "platform": platform,
+                    "success": pub_res.success,
+                    "external_post_id": pub_res.external_post_id,
+                    "error": pub_res.error_message
+                })
+
+    return {
+        "status": "generated",
+        "campaign": campaign,
+        "auto_published": req.auto_publish,
+        "published_results": published_results
+    }
+
+
+@app.get("/api/channels/health")
+def get_channels_health_endpoint(user: AuthenticatedUser = Depends(get_current_user)):
+    report = analytics_service.evaluate_channel_health(user.tenant_id)
+    return report.model_dump()
+
+
+@app.get("/api/analytics/overview")
+def get_analytics_overview_endpoint(user: AuthenticatedUser = Depends(get_current_user)):
+    overview = analytics_service.get_tenant_analytics_overview(user.tenant_id)
+    return overview.model_dump()
+
 @app.get("/api/templates")
 def list_templates():
-    return {"templates": TEMPLATES, "count": len(TEMPLATES)}
+    combined = list(TEMPLATES)
+    for t in TEMPLATES_CATALOG:
+        combined.append({
+            "id": t.id,
+            "name": t.name,
+            "category": t.archetype,
+            "description": t.description,
+            "supports_photo_cutout": t.supports_photo_cutout
+        })
+    return {"templates": combined, "count": len(combined)}
+
+
+@app.get("/api/poster/templates")
+def list_poster_templates():
+    """Returns the 30 production parametric templates catalog."""
+    return {
+        "templates": [t.model_dump() for t in TEMPLATES_CATALOG],
+        "count": len(TEMPLATES_CATALOG)
+    }
 
 
 @app.get("/api/poster/archetypes")
 def list_poster_archetypes():
-    """Returns the 7 layout archetypes supported by the Poster Design Agent."""
+    """Returns the 10 layout archetypes supported by the Poster Design Agent."""
     return {
-        "archetypes": [
-            {"id": "hero-text", "name": "Hero Text", "best_for": "Announcements, greetings, hiring", "focal": "headline"},
-            {"id": "centered-badge", "name": "Centered Badge", "best_for": "Festivals, grand openings", "focal": "badge_circle"},
-            {"id": "offer-burst", "name": "Offer Burst", "best_for": "Discounts, flash sales", "focal": "burst_text"},
-            {"id": "quote-card", "name": "Quote Card", "best_for": "Testimonials, authority quotes", "focal": "quote_text"},
-            {"id": "split-image-text", "name": "Split Image + Text", "best_for": "Products, dining, real estate", "focal": "photo"},
-            {"id": "event-ticket", "name": "Event Ticket", "best_for": "Events, workshops, dates", "focal": "date_numeral"},
-            {"id": "minimal-editorial", "name": "Minimal Editorial", "best_for": "Luxury, boutique, architecture", "focal": "headline"}
-        ]
+        "archetypes": list(ARCHETYPES_CATALOG.values()),
+        "count": len(ARCHETYPES_CATALOG)
+    }
+
+
+@app.post("/api/poster/candidates")
+def get_template_candidates(req: CandidateSelectionRequest):
+    """Scored & diversified template selector returning top 3 diverse candidates."""
+    candidates = template_selector.select_candidates(
+        vertical=req.vertical,
+        industry_category=req.industry_category,
+        goal=req.goal or "brand_awareness",
+        has_client_photos=req.has_client_photos,
+        recent_archetypes=req.recent_archetypes,
+        limit=req.limit or 3
+    )
+    return {
+        "candidates": [c.model_dump() for c in candidates],
+        "count": len(candidates)
     }
 
 
@@ -1753,27 +2073,161 @@ def render_custom_poster_spec(spec: PosterSpec):
     }
 
 
+class PosterQAInspectRequest(BaseModel):
+    spec: PosterSpec
+    platform: Optional[str] = None
+    use_playwright: bool = True
+
+
+class PosterCriticEvaluateRequest(BaseModel):
+    spec: PosterSpec
+    platform: Optional[str] = None
+    brief: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/poster/qa/inspect")
+async def inspect_poster_qa(req: PosterQAInspectRequest):
+    """Executes Playwright & DOM-based QA inspection on a poster specification."""
+    report = await run_full_poster_qa(req.spec, platform=req.platform, use_playwright=req.use_playwright)
+    return report.model_dump()
+
+
+@app.post("/api/poster/critic/evaluate")
+async def evaluate_poster_critic_endpoint(req: PosterCriticEvaluateRequest):
+    """Evaluates poster specification using the 10-criterion Vision Critic rubric."""
+    report = await evaluate_vision_critic(req.spec, brief=req.brief, platform=req.platform)
+    return report.model_dump()
+
+
+@app.post("/api/poster/render/html")
+def render_poster_html_endpoint(spec: PosterSpec):
+    """Generates complete HTML/CSS representation for the poster specification."""
+    html = generate_poster_html(spec)
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+class PrintQRCodeRequest(BaseModel):
+    url: str
+    fg_color: str = "#0F172A"
+    bg_color: str = "#FFFFFF"
+    size_px: int = 600
+    dpi: int = 300
+
+
+@app.get("/api/print/formats")
+def list_print_formats():
+    """Returns catalog of supported print formats with mm dimensions, 300 DPI pixel sizes, and bleed."""
+    formats_list = []
+    for fmt_id, dims in PRINT_FORMATS.items():
+        formats_list.append({
+            "id": fmt_id,
+            "name": dims.name,
+            "orientation": dims.orientation,
+            "trim_width_mm": dims.trim_width_mm,
+            "trim_height_mm": dims.trim_height_mm,
+            "bleed_mm": dims.bleed_mm,
+            "safe_margin_mm": dims.safe_margin_mm,
+            "trim_width_px": dims.trim_width_px,
+            "trim_height_px": dims.trim_height_px,
+            "total_width_px": dims.total_width_px,
+            "total_height_px": dims.total_height_px,
+            "dpi": dims.dpi
+        })
+    return {"formats": formats_list, "count": len(formats_list)}
+
+
+@app.post("/api/print/qr")
+def generate_qr_endpoint(req: PrintQRCodeRequest):
+    """Generates high-resolution 300 DPI vector/raster QR code for print collateral."""
+    qr_b64 = generate_print_qr_base64(
+        url=req.url,
+        fg_color=req.fg_color,
+        bg_color=req.bg_color,
+        size_px=req.size_px,
+        dpi=req.dpi
+    )
+    return {
+        "url": req.url,
+        "qr_base64": qr_b64,
+        "size_px": req.size_px,
+        "dpi": req.dpi
+    }
+
+
+@app.post("/api/print/generate")
+async def generate_print_collateral_endpoint(
+    req: PrintGenerationRequest,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)
+):
+    """Generates print collateral (A4 flyer, A5 leaflet, Tri-fold brochure) for the business."""
+    tenant_id = user.tenant_id if user else "default"
+    result = print_designer.generate_collateral_for_business(tenant_id, req)
+    return result.model_dump(exclude={"pdf_bytes", "png_bytes", "thumbnail_bytes"})
+
+
+@app.get("/api/print/download/{format_name}.pdf")
+async def download_print_pdf(
+    format_name: str,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)
+):
+    """Direct PDF download endpoint with attachment header for commercial printing."""
+    tenant_id = user.tenant_id if user else "default"
+    req = PrintGenerationRequest(format=format_name)
+    result = print_designer.generate_collateral_for_business(tenant_id, req)
+    return Response(
+        content=result.pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{format_name}_print_300dpi.pdf"'}
+    )
+
+
 @app.post("/api/poster/render")
 async def render_custom_poster(req: PosterRenderRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_current_user)):
     p_color = req.primary_color or req.brand_color or "#6366F1"
-    b_name = req.business_name or "Your Business"
+    b_name = req.business_name or ""
+    tenant_id = user.tenant_id if user else "default"
 
-    # Strictly enforce Poster v3 Alignment Masterclass copy limits
+    industry_primary = ""
+    industry_sub = ""
+    if user:
+        with db() as con:
+            p_row = con.execute("SELECT * FROM business_profiles WHERE tenant_id=?", (user.tenant_id,)).fetchone()
+            if p_row:
+                pd = dict(p_row)
+                if not b_name and pd.get("business_name"):
+                    b_name = pd["business_name"]
+                if not req.primary_color and pd.get("primary_color"):
+                    p_color = pd["primary_color"]
+                industry_primary = pd.get("industry_primary", "")
+                industry_sub = pd.get("industry_sub", "")
+
+    if not b_name:
+        b_name = "Your Brand"
+
+    # Strictly resolve vertical to prevent cross-contamination
+    vertical = resolve_vertical(industry_primary, industry_sub, b_name, req.title)
+    is_coffee = vertical == "cafe_coffee" or any(k in (b_name + req.title).lower() for k in ("cold brew", "coffee", "brew", "roast"))
+    default_eb = "SINGLE-ORIGIN COLD BREW" if is_coffee else (f"✦ {b_name.upper()}" if b_name else "FEATURED ANNOUNCEMENT")
+    default_badge = "TASTING SESSION" if is_coffee else "FEATURED"
+    default_cta = "Reserve a seat" if is_coffee else "Learn More"
+
+    # Strictly enforce Poster copy limits and contamination protection
     from app.agents.poster_designer import tighten_poster_copy, poster_design_agent
     clean_copy = tighten_poster_copy({
         "headline": req.title,
         "subhead": req.subtitle,
-        "cta": req.cta or "Learn More",
-        "eyebrow": "SINGLE-ORIGIN COLD BREW" if "cold brew" in (req.title or "").lower() else "FEATURED ANNOUNCEMENT",
-        "badge": "TASTING SESSION" if "tasting" in (req.title or "").lower() else "SPECIAL EVENT"
+        "cta": req.cta or default_cta,
+        "eyebrow": default_eb,
+        "badge": default_badge
     }, business_name=b_name)
 
     safe_title = clean_copy["headline"]
     safe_subtitle = clean_copy["subhead"]
     safe_cta = clean_copy["cta"]
 
-    # Invoke full LangGraph Poster Design Agent
+    # Invoke full LangGraph Poster Design Agent with tenant-isolated thread_id
     try:
+        thread_id = f"{tenant_id}:{uuid.uuid4().hex[:8]}"
         graph_state = await poster_design_agent.ainvoke({
             "request": {
                 "title": safe_title,
@@ -1788,7 +2242,7 @@ async def render_custom_poster(req: PosterRenderRequest, user: Optional[Authenti
                 "rating": req.rating,
                 "primary_color": p_color
             }
-        })
+        }, config={"configurable": {"thread_id": thread_id}})
 
         run_id = None
         try:

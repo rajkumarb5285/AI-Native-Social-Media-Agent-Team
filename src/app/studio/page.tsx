@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/ui/header";
 import { Button } from "@/components/ui/button";
 import { AgentCard } from "@/components/ui/agent-card";
@@ -19,19 +20,20 @@ import {
   X,
   CheckCircle2,
 } from "lucide-react";
-import { campaignService, authService, getAuthToken } from "@/lib/api";
+import { campaignService, authService, getAuthToken, fetchApi } from "@/lib/api";
 
 export default function StudioFloorPage() {
-  const [businessName, setBusinessName] = React.useState("Rajkumar's Coffee Studio");
-  const [industry, setIndustry] = React.useState("Specialty Cafe & Roastery");
-  const [city, setCity] = React.useState("Pune, Maharashtra");
-  const [phone, setPhone] = React.useState("+91 98200 12345");
-  const [address, setAddress] = React.useState("42 Koregaon Park, Pune");
+  const router = useRouter();
+  const [businessName, setBusinessName] = React.useState("");
+  const [industry, setIndustry] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [address, setAddress] = React.useState("");
 
-  const [objective, setObjective] = React.useState("Single-Origin Cold Brew Tasting");
-  const [tone, setTone] = React.useState("Warm Editorial");
-  const [brandColor, setBrandColor] = React.useState("#D97706");
-  const [verifiedOffer, setVerifiedOffer] = React.useState("15% Off Cold Brew Reserve on Weekdays");
+  const [objective, setObjective] = React.useState("");
+  const [tone, setTone] = React.useState("Confident & Modern");
+  const [brandColor, setBrandColor] = React.useState("#6366f1");
+  const [verifiedOffer, setVerifiedOffer] = React.useState("");
   const [selectedPlatforms, setSelectedPlatforms] = React.useState<string[]>([
     "Instagram",
     "GMB",
@@ -40,12 +42,12 @@ export default function StudioFloorPage() {
 
   const [isWorking, setIsWorking] = React.useState(false);
   const [archetype, setArchetype] = React.useState<string>("split-image-text");
-  const [activePosterUrl, setActivePosterUrl] = React.useState(
-    "http://127.0.0.1:8000/static/generated/posters/66f4e5ff-eb1f-4147-b171-2e6481b01163.png"
-  );
-  const [activeHeadline, setActiveHeadline] = React.useState(
-    "Artisanal Single-Origin Cold Brew"
-  );
+  const [candidates, setCandidates] = React.useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>("");
+  const [showAllTemplates, setShowAllTemplates] = React.useState(false);
+  const [allArchetypes, setAllArchetypes] = React.useState<any[]>([]);
+  const [activePosterUrl, setActivePosterUrl] = React.useState<string | null>(null);
+  const [activeHeadline, setActiveHeadline] = React.useState<string>("");
   const [agentStep, setAgentStep] = React.useState<"idle" | "research" | "copy" | "design" | "done">("idle");
   const [latestRunId, setLatestRunId] = React.useState<string | null>(null);
   const [isZoomOpen, setIsZoomOpen] = React.useState(false);
@@ -59,7 +61,7 @@ export default function StudioFloorPage() {
   const handleOpenCanva = async () => {
     try {
       const res = await campaignService.createCanvaDesign({
-        title: activeHeadline,
+        title: activeHeadline || businessName,
         brand_color: brandColor,
         width: 1080,
         height: 1350,
@@ -73,28 +75,49 @@ export default function StudioFloorPage() {
     }
   };
 
-
-  // Load brand profile and authenticate
+  // Enforce onboarding gating and load real business profile
   React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("nexus_brand_profile");
-      if (saved) {
-        const p = JSON.parse(saved);
-        if (p.businessName) setBusinessName(p.businessName);
-        if (p.industry) setIndustry(p.industry);
-        if (p.city) setCity(p.city);
-        if (p.phone) setPhone(p.phone);
-        if (p.address) setAddress(p.address);
-        if (p.approvedOffer) setVerifiedOffer(p.approvedOffer);
-        if (p.toneVoice) setTone(p.toneVoice);
-        if (p.primaryColor) setBrandColor(p.primaryColor);
-      }
-    } catch (_) {}
+    async function loadWorkspace() {
+      try {
+        const profile = await fetchApi("/api/profile");
+        if (!profile || !profile.exists || profile.onboarding_status !== "complete") {
+          router.push("/onboarding");
+          return;
+        }
+        if (profile.business_name) setBusinessName(profile.business_name);
+        if (profile.industry_primary) setIndustry(profile.industry_primary);
+        if (profile.address) setAddress(profile.address);
+        if (profile.phone) setPhone(profile.phone);
+        if (profile.primary_color) setBrandColor(profile.primary_color);
+        if (profile.tagline) setVerifiedOffer(profile.tagline);
 
-    if (!getAuthToken()) {
-      authService.getDevToken().catch(() => {});
+        // Fetch AI recommended candidates & archetypes
+        try {
+          const candRes = await campaignService.getTemplateCandidates({
+            vertical: profile.industry_primary,
+            industry_category: profile.industry_primary,
+            goal: "promotion",
+            has_client_photos: true,
+          });
+          if (candRes?.candidates && candRes.candidates.length > 0) {
+            setCandidates(candRes.candidates);
+            setSelectedTemplateId(candRes.candidates[0].template_id);
+            setArchetype(candRes.candidates[0].archetype);
+          }
+        } catch (_) {}
+
+        try {
+          const archRes = await campaignService.getPosterArchetypes();
+          if (archRes?.archetypes) {
+            setAllArchetypes(archRes.archetypes);
+          }
+        } catch (_) {}
+      } catch (_) {
+        router.push("/login?return_to=/studio");
+      }
     }
-  }, []);
+    loadWorkspace();
+  }, [router]);
 
   const togglePlatform = (p: string) => {
     if (selectedPlatforms.includes(p)) {
@@ -213,14 +236,14 @@ export default function StudioFloorPage() {
             </button>
             <div className="w-full aspect-square rounded-2xl overflow-hidden border border-white/20 shadow-2xl bg-black">
               <img
-                src={activePosterUrl}
+                src={activePosterUrl || undefined}
                 alt="High-resolution campaign poster"
                 className="w-full h-full object-contain"
               />
             </div>
             <div className="mt-4 flex items-center gap-3">
               <a
-                href={activePosterUrl}
+                href={activePosterUrl || "#"}
                 download="studio_campaign_poster.png"
                 target="_blank"
                 rel="noreferrer"
@@ -385,37 +408,125 @@ export default function StudioFloorPage() {
                 </div>
               </div>
 
-              {/* Design Layout Archetype (Prompt Pack) */}
+              {/* Template / Style Selector: 3 Scored Candidates + 10 Archetypes / 30 Pro Templates */}
               <div>
-                <label className="text-stone-300 font-medium block mb-1.5 flex items-center justify-between">
-                  <span>Canva Layout Archetype</span>
-                  <span className="text-[10px] text-amber-400 font-mono">7 Pro Templates</span>
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: "split-image-text", name: "Split Showcase", desc: "Food, dining & products" },
-                    { id: "hero-text", name: "Hero Text", desc: "Bold headline focus" },
-                    { id: "centered-badge", name: "Centered Badge", desc: "Festivals & openings" },
-                    { id: "offer-burst", name: "Offer Burst", desc: "Flash sales & discounts" },
-                    { id: "quote-card", name: "Quote Card", desc: "Reviews & testimonials" },
-                    { id: "event-ticket", name: "Event Ticket", desc: "Conferences & dates" },
-                    { id: "minimal-editorial", name: "Minimal Editorial", desc: "Quiet luxury & monograph" },
-                  ].map((arch) => (
-                    <button
-                      type="button"
-                      key={arch.id}
-                      onClick={() => setArchetype(arch.id)}
-                      className={`p-2 rounded-xl text-left border transition-all ${
-                        archetype === arch.id
-                          ? "bg-amber-500/15 border-amber-500 text-amber-300 font-semibold"
-                          : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200"
-                      }`}
-                    >
-                      <div className="text-xs font-semibold">{arch.name}</div>
-                      <div className="text-[10px] text-stone-500">{arch.desc}</div>
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-stone-300 font-medium text-xs flex items-center gap-1.5">
+                    <span>✦ Template & Layout Strategy</span>
+                    <span className="text-[10px] text-amber-400 font-mono bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">3 Diversified Candidates</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTemplates(!showAllTemplates)}
+                    className="text-[11px] text-stone-400 hover:text-amber-400 transition-colors"
+                  >
+                    {showAllTemplates ? "Show AI Recommendations" : "Browse All 10 Archetypes →"}
+                  </button>
                 </div>
+
+                {!showAllTemplates ? (
+                  <div className="space-y-2">
+                    {candidates.length > 0 ? (
+                      candidates.map((cand, idx) => (
+                        <button
+                          type="button"
+                          key={cand.template_id}
+                          onClick={() => {
+                            setSelectedTemplateId(cand.template_id);
+                            setArchetype(cand.archetype);
+                          }}
+                          className={`w-full p-2.5 rounded-xl text-left border transition-all ${
+                            selectedTemplateId === cand.template_id || archetype === cand.archetype
+                              ? "bg-amber-500/15 border-amber-500 text-stone-100 shadow-sm shadow-amber-500/10"
+                              : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200 hover:border-white/10"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-stone-100 flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 text-[10px] flex items-center justify-center font-bold">
+                                {idx + 1}
+                              </span>
+                              {cand.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              {Math.round(cand.score)}% Match
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-stone-400 mb-1.5 leading-snug">
+                            {cand.description}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] font-mono bg-stone-800 text-amber-300/80 px-1.5 py-0.5 rounded">
+                              {cand.archetype}
+                            </span>
+                            {cand.supports_photo_cutout && (
+                              <span className="text-[9px] font-mono bg-cyan-500/10 text-cyan-300 px-1.5 py-0.5 rounded">
+                                📸 Cutout Ready
+                              </span>
+                            )}
+                            <span className="text-[9px] text-stone-500 italic truncate max-w-[220px]">
+                              {cand.rationale}
+                            </span>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: "split-image-text", name: "Split Showcase", desc: "Food, dining & products" },
+                          { id: "product-cutout", name: "Product Cutout", desc: "Floating product spotlight" },
+                          { id: "hero-text", name: "Hero Text", desc: "Bold headline focus" },
+                        ].map((arch) => (
+                          <button
+                            type="button"
+                            key={arch.id}
+                            onClick={() => setArchetype(arch.id)}
+                            className={`p-2 rounded-xl text-left border transition-all ${
+                              archetype === arch.id
+                                ? "bg-amber-500/15 border-amber-500 text-amber-300 font-semibold"
+                                : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            <div className="text-xs font-semibold">{arch.name}</div>
+                            <div className="text-[10px] text-stone-500">{arch.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
+                    {(allArchetypes.length > 0 ? allArchetypes : [
+                      { id: "hero-text", name: "Hero Text", best_for: "Announcements & SaaS" },
+                      { id: "split-image-text", name: "Split Showcase", best_for: "Dining & hospitality" },
+                      { id: "centered-badge", name: "Centered Badge", best_for: "Festivals & celebrations" },
+                      { id: "offer-burst", name: "Offer Burst", best_for: "Flash sales & discounts" },
+                      { id: "quote-card", name: "Quote Card", best_for: "Reviews & authority" },
+                      { id: "product-cutout", name: "Product Cutout", best_for: "Sneakers & luxury" },
+                      { id: "grid-multi-item", name: "Grid Multi-Item", best_for: "Lookbook & service menu" },
+                      { id: "event-ticket", name: "Event Ticket", best_for: "Conferences & workshops" },
+                      { id: "stats-metric", name: "Stats & Metric", best_for: "Clinical & growth metrics" },
+                      { id: "minimal-editorial", name: "Minimal Editorial", best_for: "Quiet luxury & monograph" }
+                    ]).map((arch: any) => (
+                      <button
+                        type="button"
+                        key={arch.id}
+                        onClick={() => {
+                          setArchetype(arch.id);
+                          setSelectedTemplateId("");
+                        }}
+                        className={`p-2 rounded-xl text-left border transition-all ${
+                          archetype === arch.id
+                            ? "bg-amber-500/15 border-amber-500 text-amber-300 font-semibold"
+                            : "bg-stone-900 border-white/5 text-stone-400 hover:text-stone-200"
+                        }`}
+                      >
+                        <div className="text-xs font-semibold">{arch.name}</div>
+                        <div className="text-[10px] text-stone-500 truncate">{arch.best_for || arch.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
 
@@ -548,7 +659,7 @@ export default function StudioFloorPage() {
             <div className="rounded-2xl bg-black border border-white/10 p-3 space-y-3 shadow-inner">
               <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10 bg-[#121110] group">
                 <img
-                  src={activePosterUrl}
+                  src={activePosterUrl || undefined}
                   alt={activeHeadline}
                   className="w-full h-full object-cover transition-transform group-hover:scale-[1.02]"
                 />
@@ -562,7 +673,7 @@ export default function StudioFloorPage() {
                     <Eye className="w-4 h-4" />
                   </button>
                   <a
-                    href={activePosterUrl}
+                    href={activePosterUrl || "#"}
                     download="studio_campaign_poster.png"
                     target="_blank"
                     rel="noreferrer"
