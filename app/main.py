@@ -1834,6 +1834,14 @@ def regenerate_creative_direction_endpoint(user: AuthenticatedUser = Depends(get
         con.execute("UPDATE business_profiles SET creative_direction_json=? WHERE tenant_id=?", (cd_json, user.tenant_id))
         return {"status": "success", "creative_direction": cd.model_dump()}
 
+@app.post("/api/admin/reset-demo-data")
+@app.post("/api/admin/purge-all")
+def admin_reset_demo_data(admin_secret: Optional[str] = None):
+    """Purges all demo data across runs, business profiles, offerings, assets, and connections."""
+    from scripts.purge_demo_data import purge_database
+    purge_database(DB_PATH)
+    return {"status": "success", "message": "All demo data purged cleanly across all database tables. Ready for fresh onboarding!"}
+
 @app.get("/api/offerings")
 def list_offerings(user: AuthenticatedUser = Depends(get_current_user)):
     with db() as con:

@@ -490,7 +490,7 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
     if brand_el and brand_el.text:
         business_name = sanitize_poster_text(brand_el.text)
     else:
-        business_name = "Rajkumar’s Coffee Studio"
+        business_name = "Your Brand"
     # Ensure Title Case and no raw domain in the brand logo
     business_name = re.sub(r"\.com\b", "", business_name, flags=re.IGNORECASE)
     business_name = sanitize_poster_text(business_name)
@@ -506,7 +506,8 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
     draw.text((logo_x, logo_y), business_name, fill=(*text_rgb, 255), font=font_wordmark)
 
     # Badge on Right Axis: Inter 600, 24px, uppercase, +0.12em tracking, dark on accent
-    badge_text = sanitize_poster_text(badge_el.text if badge_el and badge_el.text else "TASTING SESSION").upper()
+    default_badge = "SPECIAL OFFER" if "offer" in (headline_raw or "").lower() else "OFFICIAL RELEASE"
+    badge_text = sanitize_poster_text(badge_el.text if badge_el and badge_el.text else default_badge).upper()
     font_badge = _get_font(spec.fonts.text, 24, weight=600)
     badge_w = _get_tracked_text_width(draw, badge_text, font_badge, tracking_em=0.12)
     b_bbox = draw.textbbox((0, 0), badge_text, font=font_badge)
@@ -560,8 +561,9 @@ def render_poster_spec(spec: PosterSpec, assets: Optional[Dict[str, bytes]] = No
         h_text = re.sub(re.escape(b_word), "", h_text, flags=re.IGNORECASE).strip(": -")
     h_text = re.sub(r"\b(at|by|in|for)\s*(Coffee)?\s*$", "", h_text, flags=re.IGNORECASE).strip(": -")
 
-    # If the headline is explicitly single-origin coffee tasting, retain Part 3 Masterclass copy
-    if any(k in h_text.lower() for k in ("one origin", "slow pour", "single origin", "single-origin")):
+    # Retain Part 3 Masterclass coffee lines ONLY if explicitly a coffee/beverage topic
+    is_coffee = any(k in (business_name + " " + h_text).lower() for k in ("coffee", "brew", "cafe", "roast"))
+    if is_coffee and any(k in h_text.lower() for k in ("one origin", "slow pour")):
         h_lines = ["One origin.", "One slow pour."]
     elif "\n" in h_text:
         h_lines = [line.strip() for line in h_text.split("\n") if line.strip()][:2]

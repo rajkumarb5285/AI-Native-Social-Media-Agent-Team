@@ -91,6 +91,14 @@ export default function StudioFloorPage() {
         if (profile.primary_color) setBrandColor(profile.primary_color);
         if (profile.tagline) setVerifiedOffer(profile.tagline);
 
+        // Clean up any stale legacy demo run from localStorage
+        try {
+          const saved = localStorage.getItem("nexus_latest_run");
+          if (saved && (saved.includes("Coffee Studio") || saved.includes("Cold Brew") || saved.includes("Apex Nitro"))) {
+            localStorage.removeItem("nexus_latest_run");
+          }
+        } catch (_) {}
+
         // Fetch AI recommended candidates & archetypes
         try {
           const candRes = await campaignService.getTemplateCandidates({
@@ -615,7 +623,11 @@ export default function StudioFloorPage() {
                 name="Research Specialist"
                 role="Market Radar"
                 avatarIcon="radar"
-                taskSummary="Verified Diwali holiday trends, Pune coffee footfall, and local search intent."
+                taskSummary={
+                  isSneakerRetail
+                    ? "Verified footwear market trends, sneaker drop velocity, and local search intent."
+                    : "Verified local market trends, consumer demand, and competitive search intent."
+                }
                 status={
                   agentStep === "research"
                     ? "working"
@@ -630,7 +642,11 @@ export default function StudioFloorPage() {
                 name="Strategy & Copywriter"
                 role="Content Engine"
                 avatarIcon="pen"
-                taskSummary="Drafted warm flagship narrative with 15% weekday offer and zero unverified claims."
+                taskSummary={
+                  isSneakerRetail
+                    ? "Drafted high-energy flagship campaign copy with verified pricing and zero false claims."
+                    : "Drafted high-converting flagship copy with verified offer terms and zero false claims."
+                }
                 status={
                   agentStep === "copy"
                     ? "working"
@@ -645,7 +661,7 @@ export default function StudioFloorPage() {
                 name="Poster Designer"
                 role="Visual Studio"
                 avatarIcon="palette"
-                taskSummary="Composed 1080×1080 Saffron Gold layout, Diya motifs, and crisp Google rating badge."
+                taskSummary="Composed 1080×1350 alignment masterclass layout with verified typography and badge."
                 status={
                   agentStep === "design" ? "working" : agentStep === "done" ? "done" : "idle"
                 }
@@ -656,7 +672,7 @@ export default function StudioFloorPage() {
                 name="Quality Gate"
                 role="Governance"
                 avatarIcon="shield"
-                taskSummary="Audit completed: 100/100 compliance score. Verified contact and WCAG AAA contrast."
+                taskSummary="Audit completed: 100/100 compliance score. Verified contact details and WCAG contrast."
                 status={agentStep === "done" ? "done" : "idle"}
               />
 
@@ -665,7 +681,7 @@ export default function StudioFloorPage() {
                 name="Publisher Agent"
                 role="Operations"
                 avatarIcon="send"
-                taskSummary="Staged draft for Instagram, GMB, and Facebook. Awaiting 1-tap editorial sign-off."
+                taskSummary="Staged drafts across selected channels. Awaiting 1-tap editorial sign-off."
                 status={agentStep === "done" ? "done" : "idle"}
               />
             </div>
@@ -677,55 +693,68 @@ export default function StudioFloorPage() {
               <h2 id="liveMatHeading" className="text-xs font-mono text-amber-500 uppercase font-semibold">
                 Zone 3 · Live Master Mat
               </h2>
-              <span className="text-[11px] text-stone-400">1080×1080 Square</span>
+              <span className="text-[11px] text-stone-400">1080×1350 Square</span>
             </div>
 
             <div className="rounded-2xl bg-black border border-white/10 p-3 space-y-3 shadow-inner">
-              <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10 bg-[#121110] group">
-                <img
-                  src={activePosterUrl || undefined}
-                  alt={activeHeadline}
-                  className="w-full h-full object-cover transition-transform group-hover:scale-[1.02]"
-                />
+              {activePosterUrl ? (
+                <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10 bg-[#121110] group">
+                  <img
+                    src={activePosterUrl}
+                    alt={activeHeadline || "Campaign Poster"}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-[1.02]"
+                  />
 
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => setIsZoomOpen(true)}
-                    className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
-                    aria-label="Inspect poster full screen"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <a
-                    href={activePosterUrl || "#"}
-                    download="studio_campaign_poster.png"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
-                    aria-label="Download poster PNG"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => setIsZoomOpen(true)}
+                      className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
+                      aria-label="Inspect poster full screen"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <a
+                      href={activePosterUrl}
+                      download="studio_campaign_poster.png"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
+                      aria-label="Download poster PNG"
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10 bg-[#121110] flex flex-col items-center justify-center p-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
+                    <Sparkles className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <p className="text-xs font-semibold text-stone-200 mb-1">Canvas Awaiting Brief</p>
+                  <p className="text-[11px] text-stone-500 max-w-xs">
+                    Configure your campaign objective & verified offer on the left, then click <strong>Brief Studio Crew & Generate</strong> to render your live master poster.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-1 text-xs">
                 <span className="text-[10px] font-mono text-amber-500 uppercase font-semibold block">
-                  Flagship Headline
+                  {activePosterUrl ? "Flagship Headline" : "Master Preview"}
                 </span>
                 <p className="font-semibold text-stone-100 text-xs leading-snug">
-                  {activeHeadline}
+                  {activeHeadline || objective || "Live master poster will appear here"}
                 </p>
                 <p className="text-[11px] text-stone-400">
-                  {phone} · {address}
+                  {phone || address ? `${phone} ${phone && address ? "· " : ""}${address}` : businessName}
                 </p>
               </div>
 
               <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2">
                 <button
                   type="button"
+                  disabled={!activePosterUrl}
                   onClick={() => setIsZoomOpen(true)}
-                  className="text-stone-400 hover:text-stone-200 text-xs flex items-center gap-1"
+                  className="text-stone-400 hover:text-stone-200 disabled:opacity-40 text-xs flex items-center gap-1"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Inspect</span>
