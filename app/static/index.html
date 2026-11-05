@@ -2148,26 +2148,30 @@
     let isRegisterMode = false;
     function toggleAuthMode() {
       isRegisterMode = !isRegisterMode;
+      authTab = isRegisterMode ? 'register' : 'login';
       const link = $('authToggleModeLink');
       const extra = $('regExtraFields');
       const submitBtn = $('authSubmitBtn');
-      const pwdSec = $('claudePwdSection');
+      const pwdSec = $('authPwdSection') || $('claudePwdSection');
+      const pwdHint = $('pwdHint');
       if (isRegisterMode) {
         if (link) link.textContent = 'Already have an account? Sign in';
         if (extra) extra.style.display = 'flex';
         if (pwdSec) pwdSec.style.display = 'block';
+        if (pwdHint) pwdHint.style.display = 'block';
         if (submitBtn) submitBtn.textContent = 'Create Account with email';
       } else {
         if (link) link.textContent = "Don't have an account? Sign up";
         if (extra) extra.style.display = 'none';
-        if (pwdSec) pwdSec.style.display = 'none';
-        if (submitBtn) submitBtn.textContent = 'Continue with email';
+        if (pwdSec) pwdSec.style.display = 'block';
+        if (pwdHint) pwdHint.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = 'Sign In to Workspace';
       }
     }
 
     function onEmailInputChanged() {
       const email = $('auth_email')?.value.trim();
-      const pwdSec = $('claudePwdSection');
+      const pwdSec = $('authPwdSection') || $('claudePwdSection');
       if (email.includes('@') && email.includes('.') && pwdSec && !isRegisterMode) {
         pwdSec.style.display = 'block';
       }
